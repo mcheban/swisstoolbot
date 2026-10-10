@@ -3,8 +3,8 @@ package org.cheban.swisstoolbot.bot;
 import lombok.extern.slf4j.Slf4j;
 import org.cheban.swisstoolbot.objects.ImageResult;
 import org.cheban.swisstoolbot.util.HtmlUtil;
-import org.telegram.abilitybots.api.bot.AbilityBot;
-import org.telegram.abilitybots.api.objects.MessageContext;
+import org.telegram.telegrambots.abilitybots.api.bot.AbilityBot;
+import org.telegram.telegrambots.abilitybots.api.objects.MessageContext;
 import org.telegram.telegrambots.meta.api.methods.send.SendDocument;
 import org.telegram.telegrambots.meta.api.methods.send.SendMediaGroup;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
@@ -13,13 +13,14 @@ import org.telegram.telegrambots.meta.api.objects.InputFile;
 import org.telegram.telegrambots.meta.api.objects.media.InputMedia;
 import org.telegram.telegrambots.meta.api.objects.media.InputMediaPhoto;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
+import org.telegram.telegrambots.meta.generics.TelegramClient;
 
 @Slf4j
 public abstract class AbstractAbilityBot extends AbilityBot {
   private final long creatorId;
 
-  protected AbstractAbilityBot(String botToken, String botUsername, long creatorId) {
-    super(botToken, botUsername);
+  protected AbstractAbilityBot(TelegramClient telegramClient, String botUsername, long creatorId) {
+    super(telegramClient, botUsername);
     this.creatorId = creatorId;
   }
 
@@ -58,7 +59,7 @@ public abstract class AbstractAbilityBot extends AbilityBot {
             .build();
   }
 
-  protected SendPhoto.SendPhotoBuilder buildSendPhoto(ImageResult image) {
+  protected SendPhoto.SendPhotoBuilder<?,?> buildSendPhoto(ImageResult image) {
     log.info("[buildSendPhoto] {}", image.src());
     return SendPhoto.builder()
             .photo(new InputFile(image.src()))
@@ -68,7 +69,7 @@ public abstract class AbstractAbilityBot extends AbilityBot {
 
   protected boolean silentSendMediaGroup(SendMediaGroup method) {
     try {
-      this.execute(method);
+      this.telegramClient.execute(method);
       return true;
     } catch (TelegramApiException e) {
       log.error("Could not sendMediaGroup", e);
@@ -78,7 +79,7 @@ public abstract class AbstractAbilityBot extends AbilityBot {
 
   protected void silentSendPhoto(SendPhoto method) {
     try {
-      this.execute(method);
+      this.telegramClient.execute(method);
     } catch (TelegramApiException e) {
       log.error("Could not send photo", e);
     }
@@ -87,7 +88,7 @@ public abstract class AbstractAbilityBot extends AbilityBot {
 
   protected void silentSendDocument(SendDocument method) {
     try {
-      this.execute(method);
+      this.telegramClient.execute(method);
     } catch (TelegramApiException e) {
       log.error("Could not sendDocument", e);
     }

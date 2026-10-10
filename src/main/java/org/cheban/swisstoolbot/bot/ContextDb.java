@@ -1,7 +1,7 @@
 package org.cheban.swisstoolbot.bot;
 
 import lombok.RequiredArgsConstructor;
-import org.telegram.abilitybots.api.db.DBContext;
+import org.telegram.telegrambots.abilitybots.api.db.DBContext;
 
 import java.util.Objects;
 import java.util.Optional;

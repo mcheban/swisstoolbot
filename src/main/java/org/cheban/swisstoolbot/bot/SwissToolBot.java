@@ -1,5 +1,6 @@
 package org.cheban.swisstoolbot.bot;
 
+import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import org.cheban.swisstoolbot.configuration.BotProperties;
 import org.cheban.swisstoolbot.objects.LocationInfo;
@@ -11,12 +12,12 @@ import org.cheban.swisstoolbot.util.HtmlUtil;
 import org.cheban.swisstoolbot.objects.ImageResult;
 import org.cheban.swisstoolbot.objects.WebResult;
 import org.springframework.stereotype.Component;
-import org.telegram.abilitybots.api.objects.Ability;
-import org.telegram.abilitybots.api.objects.Flag;
-import org.telegram.abilitybots.api.objects.Locality;
-import org.telegram.abilitybots.api.objects.MessageContext;
-import org.telegram.abilitybots.api.objects.Privacy;
-import org.telegram.abilitybots.api.util.AbilityUtils;
+import org.telegram.telegrambots.abilitybots.api.objects.Ability;
+import org.telegram.telegrambots.abilitybots.api.objects.Flag;
+import org.telegram.telegrambots.abilitybots.api.objects.Locality;
+import org.telegram.telegrambots.abilitybots.api.objects.MessageContext;
+import org.telegram.telegrambots.abilitybots.api.objects.Privacy;
+import org.telegram.telegrambots.abilitybots.api.util.AbilityUtils;
 import org.telegram.telegrambots.meta.api.methods.send.SendDocument;
 import org.telegram.telegrambots.meta.api.methods.send.SendMediaGroup;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
@@ -27,13 +28,14 @@ import org.telegram.telegrambots.meta.api.objects.replykeyboard.ReplyKeyboardMar
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.ReplyKeyboardRemove;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.KeyboardButton;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.KeyboardRow;
+import org.telegram.telegrambots.meta.generics.TelegramClient;
 
 import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-import static org.telegram.abilitybots.api.util.AbilityUtils.getChatId;
+import static org.telegram.telegrambots.abilitybots.api.util.AbilityUtils.getChatId;
 
 @Slf4j
 @Component
@@ -46,20 +48,26 @@ public class SwissToolBot extends AbstractAbilityBot {
   private ContextDb contextDb;
 
   public SwissToolBot(BotProperties botProperties,
+                      TelegramClient telegramClient,
                       GeocodeService geocodeService,
                       WebSearchService webSearchService,
                       WeatherService weatherService) {
-    super(botProperties.getToken(), botProperties.getUsername(), botProperties.getCreatorId());
+    super(telegramClient, botProperties.getUsername(), botProperties.getCreatorId());
     this.whitelist = botProperties.getWhitelist();
     this.geocodeService = geocodeService;
     this.webSearchService = webSearchService;
     this.weatherService = weatherService;
   }
 
+  @PostConstruct
+  void init() {
+    onRegister();
+  }
+
   @Override
-  public void onUpdateReceived(Update update) {
-    this.contextDb = new ContextDb(db(), getChatId(update));
-    super.onUpdateReceived(update);
+  public void consume(Update update) {
+    this.contextDb = new ContextDb(db, getChatId(update));
+    super.consume(update);
   }
 
   @Override
@@ -178,7 +186,10 @@ public class SwissToolBot extends AbstractAbilityBot {
       this.sendText(ctx.chatId(), "No results");
     } else {
       List<InputMedia> inputMedia = results.stream().map(this::buildImageMedia).toList();
-      if (results.size() > 10 || !this.silentSendMediaGroup(new SendMediaGroup(Long.toString(ctx.chatId()), inputMedia))) {
+      if (results.size() > 10 || !this.silentSendMediaGroup(SendMediaGroup.builder()
+              .chatId(Long.toString(ctx.chatId()))
+              .medias(inputMedia)
+              .build())) {
         results.forEach(img -> this.silentSendPhoto(this.buildSendPhoto(img)
                 .chatId(Long.toString(ctx.chatId()))
                 .build()));
@@ -206,7 +217,7 @@ public class SwissToolBot extends AbstractAbilityBot {
   private void doSetLocation(MessageContext ctx) {
     if (ctx.arguments().length > 0) {
       String args = String.join(" ", ctx.arguments());
-      if (args.matches("-?\\d+(\\.\\d+)?,-?\\d+(\\.\\d+)?")) {
+      if (args.matches("-?\\\\d+(\\\\.\\\\d+)?,-?\\\\d+(\\\\.\\\\d+)?")) {
         String[] coords = args.split(",");
         Double lat = Double.valueOf(coords[0]);
         Double lon = Double.valueOf(coords[1]);
@@ -227,13 +238,13 @@ public class SwissToolBot extends AbstractAbilityBot {
   }
 
   private void requestUserLocation(MessageContext ctx) {
-    ReplyKeyboardMarkup keyboardMarkup = new ReplyKeyboardMarkup();
-    keyboardMarkup.setResizeKeyboard(true);
-    keyboardMarkup.setOneTimeKeyboard(true);
     KeyboardButton shareLocationBtn = KeyboardButton.builder().text("Share Location").requestLocation(true).build();
-    KeyboardRow row = new KeyboardRow();
-    row.add(shareLocationBtn);
-    keyboardMarkup.setKeyboard(List.of(row));
+    KeyboardRow row = new KeyboardRow(shareLocationBtn);
+    ReplyKeyboardMarkup keyboardMarkup = ReplyKeyboardMarkup.builder()
+            .keyboardRow(row)
+            .resizeKeyboard(true)
+            .oneTimeKeyboard(true)
+            .build();
     this.silent.execute(SendMessage.builder()
             .chatId(Long.toString(ctx.chatId()))
             .text("Please share your location")
@@ -248,11 +259,12 @@ public class SwissToolBot extends AbstractAbilityBot {
 
   private void doRemoveKeyboard(MessageContext ctx, String msg) {
     if (contextDb.isLocationKeyboardVisible()) {
-      SendMessage message = new SendMessage();
-      message.setChatId(Long.toString(ctx.chatId()));
-      message.setText(msg);
       ReplyKeyboardRemove keyboardMarkup = ReplyKeyboardRemove.builder().removeKeyboard(true).build();
-      message.setReplyMarkup(keyboardMarkup);
+      SendMessage message = SendMessage.builder()
+              .chatId(Long.toString(ctx.chatId()))
+              .text(msg)
+              .replyMarkup(keyboardMarkup)
+              .build();
       contextDb.setLocationKeyboardVisible(false);
       this.silent.execute(message);
     }
@@ -265,7 +277,7 @@ public class SwissToolBot extends AbstractAbilityBot {
 
     if (ctx.arguments().length > 0) {
       String args = String.join(" ", ctx.arguments());
-      if (args.matches("-?\\d+(\\.\\d+)?,-?\\d+(\\.\\d+)?")) {
+      if (args.matches("-?\\\\d+(\\\\.\\\\d+)?,-?\\\\d+(\\\\.\\\\d+)?")) {
         String[] coords = args.split(",");
         lat = Double.valueOf(coords[0]);
         lon = Double.valueOf(coords[1]);

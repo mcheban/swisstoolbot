@@ -16,4 +16,5 @@ public class BotProperties {
   private Set<Long> whitelist;
   private String positionStackToken;
   private String openWeatherMapToken;
+  private String braveSearchApiToken;
 }
