@@ -1,7 +1,7 @@
 package org.cheban.swisstoolbot.service;
 
-import org.cheban.swisstoolbot.objects.ExchangeResult;
+import java.util.Optional;
 
 public interface ExchangeRateService {
-    ExchangeResult convert(String input);
+  Optional<String> convert(String input);
 }

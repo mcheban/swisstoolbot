@@ -45,6 +45,7 @@ public enum ConfigOption {
   }
 
   abstract void setString(String value, ContextDb contextDb);
+
   abstract String getString(ContextDb contextDb);
 
   public String userName() {

@@ -4,18 +4,24 @@ import lombok.extern.slf4j.Slf4j;
 import org.cheban.swisstoolbot.objects.ImageResult;
 import org.cheban.swisstoolbot.util.HtmlUtil;
 import org.telegram.telegrambots.abilitybots.api.bot.AbilityBot;
+import org.telegram.telegrambots.abilitybots.api.objects.Flag;
 import org.telegram.telegrambots.abilitybots.api.objects.MessageContext;
+import org.telegram.telegrambots.abilitybots.api.objects.Reply;
+import org.telegram.telegrambots.meta.api.methods.ParseMode;
 import org.telegram.telegrambots.meta.api.methods.send.SendDocument;
 import org.telegram.telegrambots.meta.api.methods.send.SendMediaGroup;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.api.methods.send.SendPhoto;
 import org.telegram.telegrambots.meta.api.objects.InputFile;
+import org.telegram.telegrambots.meta.api.objects.LinkPreviewOptions;
 import org.telegram.telegrambots.meta.api.objects.media.InputMedia;
 import org.telegram.telegrambots.meta.api.objects.media.InputMediaPhoto;
+import org.telegram.telegrambots.meta.api.objects.replykeyboard.ForceReplyKeyboard;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 import org.telegram.telegrambots.meta.generics.TelegramClient;
 
 import java.io.ByteArrayInputStream;
+import java.util.function.BiConsumer;
 
 @Slf4j
 public abstract class AbstractAbilityBot extends AbilityBot {
@@ -37,54 +43,91 @@ public abstract class AbstractAbilityBot extends AbilityBot {
     }
   }
 
+  /** @return true if arguments are present; otherwise sends a force-reply prompt and returns false */
+  protected boolean requireArguments(MessageContext ctx, String prompt, String placeholder) {
+    if (ctx.arguments().length > 0) return true;
+    try {
+      this.telegramClient.execute(SendMessage.builder()
+              .chatId(Long.toString(ctx.chatId()))
+              .text(prompt)
+              .replyToMessageId(ctx.update().getMessage().getMessageId())
+              .replyMarkup(ForceReplyKeyboard.builder()
+                      .forceReply(true)
+                      .selective(true)
+                      .inputFieldPlaceholder(placeholder)
+                      .build())
+              .build());
+    } catch (TelegramApiException e) {
+      log.error("Could not send prompt", e);
+    }
+    return false;
+  }
+
+  protected Reply promptReply(String prompt, BiConsumer<Long, String> action) {
+    return Reply.of(
+            (bot, upd) -> action.accept(upd.getMessage().getChatId(), upd.getMessage().getText()),
+            Flag.MESSAGE, Flag.TEXT, Flag.REPLY,
+            upd -> prompt.equals(upd.getMessage().getReplyToMessage().getText()));
+  }
+
   protected void sendText(Long chatId, String msg) {
     this.silent.execute(SendMessage.builder()
-            .chatId(Long.toString(chatId))
-            .text(msg)
-            .build());
+        .chatId(Long.toString(chatId))
+        .text(msg)
+        .build());
   }
 
   protected void sendHtml(Long chatId, String msgHtml) {
     this.silent.execute(SendMessage.builder()
-            .chatId(Long.toString(chatId))
-            .text(msgHtml)
-            .parseMode("HTML")
-            .build());
+        .chatId(Long.toString(chatId))
+        .text(msgHtml)
+        .parseMode(ParseMode.HTML)
+        .linkPreviewOptions(LinkPreviewOptions.builder().isDisabled(true).build())
+        .build());
+  }
+
+  protected void sendMarkdown(Long chatId, String msgMarkdown) {
+    this.silent.execute(SendMessage.builder()
+        .chatId(Long.toString(chatId))
+        .text(msgMarkdown)
+        .parseMode(ParseMode.MARKDOWNV2)
+        .linkPreviewOptions(LinkPreviewOptions.builder().isDisabled(true).build())
+        .build());
   }
 
   protected InputMedia buildImageMedia(ImageResult image) {
     log.info("[buildImageMedia] {}", image.src());
     return InputMediaPhoto.builder()
-            .media(image.src())
-            .caption(HtmlUtil.buildLink(image.url(), image.title()))
-            .parseMode("HTML")
-            .build();
+        .media(image.src())
+        .caption(HtmlUtil.buildLink(image.url(), image.title()))
+        .parseMode(ParseMode.HTML)
+        .build();
   }
 
   protected InputMedia buildImageMediaWithData(ImageResult image) {
     log.info("[buildImageMediaWithData] {}", image.src());
 
     return InputMediaPhoto.builder()
-            .media(new ByteArrayInputStream(image.data()), image.src())
-            .caption(HtmlUtil.buildLink(image.url(), image.title()))
-            .parseMode("HTML")
-            .build();
+        .media(new ByteArrayInputStream(image.data()), HtmlUtil.uploadName(image.src(), image.ext(), 0))
+        .caption(HtmlUtil.buildLink(image.url(), image.title()))
+        .parseMode(ParseMode.HTML)
+        .build();
   }
 
-  protected SendPhoto.SendPhotoBuilder<?,?> buildSendPhoto(ImageResult image) {
+  protected SendPhoto.SendPhotoBuilder<?, ?> buildSendPhoto(ImageResult image) {
     log.info("[buildSendPhoto] {}", image.src());
     return SendPhoto.builder()
-            .photo(new InputFile(image.src()))
-            .caption(HtmlUtil.buildLink(image.url(), image.title()))
-            .parseMode("HTML");
+        .photo(new InputFile(image.src()))
+        .caption(HtmlUtil.buildLink(image.url(), image.title()))
+        .parseMode(ParseMode.HTML);
   }
 
-  protected SendPhoto.SendPhotoBuilder<?,?> buildSendPhotoWithData(ImageResult image) {
+  protected SendPhoto.SendPhotoBuilder<?, ?> buildSendPhotoWithData(ImageResult image, int num) {
     log.info("[buildSendPhotoWithData] {}", image.src());
     return SendPhoto.builder()
-            .photo(new InputFile(new ByteArrayInputStream(image.data()), "img.jpg"))
-            .caption(HtmlUtil.buildLink(image.url(), image.title()))
-            .parseMode("HTML");
+        .photo(new InputFile(new ByteArrayInputStream(image.data()), HtmlUtil.uploadName(image.src(), image.ext(), num)))
+        .caption(HtmlUtil.buildLink(image.url(), image.title()))
+        .parseMode(ParseMode.HTML);
   }
 
   protected boolean silentSendMediaGroup(SendMediaGroup method) {

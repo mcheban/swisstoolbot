@@ -32,8 +32,8 @@ public class PositionstackGeocodeService implements GeocodeService {
       Response response = HttpUtil.loadJson(getForwardUrl(query), Response.class);
       log.info("Got response for query={}", query);
       return response.getFirstLocation()
-              .map(l -> new LocationInfo(l.lat.doubleValue(), l.lon.doubleValue(), l.label))
-              .orElse(null);
+          .map(l -> new LocationInfo(l.lat.doubleValue(), l.lon.doubleValue(), l.label))
+          .orElse(null);
     } catch (Exception e) {
       return null;
     }

@@ -1,1 +1,7 @@
-spring.application.name: swisstoolbot
+spring:
+  application.name: swisstoolbot
+  cache:
+    type: caffeine
+    cache-names: exchangeRates,fuelPrices
+    caffeine:
+      spec: expireAfterWrite=1h,maximumSize=500

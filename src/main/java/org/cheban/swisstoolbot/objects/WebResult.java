@@ -1,3 +1,4 @@
 package org.cheban.swisstoolbot.objects;
 
-public record WebResult(String url, String title) {}
+public record WebResult(String url, String title, String description) {
+}

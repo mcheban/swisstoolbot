@@ -26,7 +26,7 @@ import java.util.stream.Stream;
 @RequiredArgsConstructor
 @Slf4j
 public class OpenWeatherMapService implements WeatherService {
-  private static final String API_URL = "http://api.openweathermap.org/data/3.0/onecall?lat=%.6f&lon=%.6f&exclude=minutely,hourly&appid=%s&units=metric";
+  private static final String API_URL = "https://api.openweathermap.org/data/3.0/onecall?lat=%.6f&lon=%.6f&exclude=minutely,hourly&appid=%s&units=metric";
   private static final String HEADER_TEMPLATE = "Weather for %s\n\nCurrently %s %.0f° (FL %.0f°)\n\n";
   private static final String DAY_TEMPLATE = "%1$ta %1$te %1$tb %2$s %3$.0f° / %4$.0f° (FL %5$.0f° / %6$.0f°)";
 
@@ -38,8 +38,8 @@ public class OpenWeatherMapService implements WeatherService {
     if (weatherData != null) {
       ZoneId zoneId = ZoneId.of(weatherData.getTimezone());
       String msg = String.format(HEADER_TEMPLATE, name, getWeatherIcon(weatherData.getCurrent().getWeatherIconCode()),
-              weatherData.getCurrent().getTemp(), weatherData.getCurrent().getFeelsLike()) +
-              weatherData.getDaily().stream().map(d -> formatDailyData(d, zoneId)).collect(Collectors.joining("\n"));
+          weatherData.getCurrent().getTemp(), weatherData.getCurrent().getFeelsLike()) +
+          weatherData.getDaily().stream().map(d -> formatDailyData(d, zoneId)).collect(Collectors.joining("\n"));
       return Optional.of(msg);
     } else {
       log.error("Could not fetch weather");
@@ -50,7 +50,7 @@ public class OpenWeatherMapService implements WeatherService {
   private static String formatDailyData(WeatherData.DailyWeather wd, ZoneId zoneId) {
     ZonedDateTime date = ZonedDateTime.ofInstant(Instant.ofEpochSecond(wd.getDt()), zoneId);
     return String.format(DAY_TEMPLATE, date.toLocalDate(), getWeatherIcon(wd.getWeatherIconCode()),
-            wd.getTemp().getMax(), wd.getTemp().getMin(), wd.getFeelsLike().getMaximum(), wd.getFeelsLike().getMinimum());
+        wd.getTemp().getMax(), wd.getTemp().getMin(), wd.getFeelsLike().getMaximum(), wd.getFeelsLike().getMinimum());
   }
 
   private static String getWeatherIcon(String weatherIcon) {
@@ -137,16 +137,16 @@ public class OpenWeatherMapService implements WeatherService {
 
       public BigDecimal getMinimum() {
         return Stream.of(getMin(), getMax(), getDay(), getNight())
-                .filter(Objects::nonNull)
-                .min(BigDecimal::compareTo)
-                .orElse(null);
+            .filter(Objects::nonNull)
+            .min(BigDecimal::compareTo)
+            .orElse(null);
       }
 
       public BigDecimal getMaximum() {
         return Stream.of(getMin(), getMax(), getDay(), getNight())
-                .filter(Objects::nonNull)
-                .max(BigDecimal::compareTo)
-                .orElse(null);
+            .filter(Objects::nonNull)
+            .max(BigDecimal::compareTo)
+            .orElse(null);
       }
     }
 

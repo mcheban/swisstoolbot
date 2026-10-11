@@ -38,22 +38,33 @@ public class HttpUtil {
   private static final Set<String> SUPPORTED_IMAGES_TYPES = Set.of("image/bmp", "image/jpeg", "image/png", "image/gif", "image/webp");
 
   private static final HttpClient HTTP = HttpClient.newBuilder()
-          .connectTimeout(Duration.ofSeconds(3))
-          .followRedirects(HttpClient.Redirect.NORMAL)
-          .version(HttpClient.Version.HTTP_1_1)   // avoids HTTP/2 quirks with some CDNs
-          .build();
+      .connectTimeout(Duration.ofSeconds(3))
+      .followRedirects(HttpClient.Redirect.NORMAL)
+      .version(HttpClient.Version.HTTP_1_1)   // avoids HTTP/2 quirks with some CDNs
+      .build();
 
   private static final long LIMIT = 5L * 1024 * 1024;
+
+  public static String detectExtension(byte[] d) {
+    if (d.length < 12) return null;
+    if ((d[0] & 0xFF) == 0xFF && (d[1] & 0xFF) == 0xD8 && (d[2] & 0xFF) == 0xFF) return "jpg";
+    if ((d[0] & 0xFF) == 0x89 && d[1] == 'P' && d[2] == 'N' && d[3] == 'G') return "png";
+    if (d[0] == 'G' && d[1] == 'I' && d[2] == 'F' && d[3] == '8') return "gif";
+    if (d[0] == 'R' && d[1] == 'I' && d[2] == 'F' && d[3] == 'F'
+            && d[8] == 'W' && d[9] == 'E' && d[10] == 'B' && d[11] == 'P') return "webp";
+    if (d[0] == 'B' && d[1] == 'M') return "bmp";
+    return null;   // SVG (text/XML), HTML error pages, AVIF, etc.
+  }
 
   public static Optional<byte[]> downloadImage(String url) {
     try {
       log.info("[downloadImage] Loading {} ...", url);
 
       HttpRequest req = HttpRequest.newBuilder(URI.create(url))
-              .timeout(Duration.ofSeconds(5))
-              .header("User-Agent", USER_AGENT)
-              .header("Accept", ACCEPT_ALL)
-              .build();
+          .timeout(Duration.ofSeconds(5))
+          .header("User-Agent", USER_AGENT)
+          .header("Accept", ACCEPT_ALL)
+          .build();
       HttpResponse<InputStream> resp = HTTP.send(req, HttpResponse.BodyHandlers.ofInputStream());
       try (InputStream in = resp.body()) {
         if (resp.statusCode() != 200) {
@@ -61,15 +72,18 @@ public class HttpUtil {
           return Optional.empty();
         }
         String type = resp.headers().firstValue("Content-Type").orElse("")
-                .split(";")[0].trim().toLowerCase();
+            .split(";")[0].trim().toLowerCase();
         if (!type.startsWith("image/")) {
           log.info("[downloadImage] [{}] Non image: {}", url, type);
           return Optional.empty();
         }
         byte[] data = in.readNBytes((int) LIMIT + 1);
         log.info("[downloadImage] [{}] Response: {}; Content-Type: {} ; Content-Length: {}",
-                url, resp.statusCode(), type, data.length);
-        return data.length > LIMIT ? Optional.empty() : Optional.of(data);
+            url, resp.statusCode(), type, data.length);
+        if (data.length > LIMIT) return Optional.empty();
+        String ext = detectExtension(data);
+        if (ext == null) return Optional.empty();
+        return Optional.of(data);
       }
     } catch (Exception e) {
       log.warn("Download failed {}: {}", url, e.toString());
@@ -135,10 +149,10 @@ public class HttpUtil {
     try {
       HttpURLConnection con = connection(url, "HEAD", URL_EXISTS_HEADERS);
       boolean ok = OK_STATUSES.contains(con.getResponseCode()) &&
-              SUPPORTED_IMAGES_TYPES.contains(con.getContentType()) &&
-              con.getContentLengthLong() < CONTENT_LENGTH_LIMIT;
+          SUPPORTED_IMAGES_TYPES.contains(con.getContentType()) &&
+          con.getContentLengthLong() < CONTENT_LENGTH_LIMIT;
       log.info("[imgExistsForTg] [{}] Response: {} {}; Content-Type: {} ; Content-Length: {}",
-              url, con.getResponseCode(), con.getResponseMessage(), con.getContentType(), con.getContentLengthLong());
+          url, con.getResponseCode(), con.getResponseMessage(), con.getContentType(), con.getContentLengthLong());
       return ok;
     } catch (Exception e) {
       log.error("[imgExistsForTg] {} Exception during url check: {}", url, e.getMessage());
@@ -155,7 +169,7 @@ public class HttpUtil {
   }
 
   private static HttpURLConnection connection(String url, String method, Map<String, String> headers)
-          throws IOException, URISyntaxException {
+      throws IOException, URISyntaxException {
     HttpURLConnection con = (HttpURLConnection) (new URI(url).toURL()).openConnection();
     con.setConnectTimeout(2000);
     con.setReadTimeout(2000);

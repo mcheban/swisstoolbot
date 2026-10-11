@@ -27,9 +27,9 @@ public class OpenMeteoWeatherService implements WeatherService {
       Double temperature = currently.get("temperature_2m").asDouble();
       Double apparentTemperature = currently.get("apparent_temperature").asDouble();
       String msg = String.format(HEADER_TEMPLATE, name, getWeatherIcon(weatherCode), temperature, apparentTemperature) +
-              parseDailyData(response.get("daily")).stream()
-                      .map(OpenMeteoWeatherService::formatDailyData)
-                      .collect(Collectors.joining("\n"));
+          parseDailyData(response.get("daily")).stream()
+              .map(OpenMeteoWeatherService::formatDailyData)
+              .collect(Collectors.joining("\n"));
       return Optional.of(msg);
     } else {
       log.error("Could not fetch weather");
@@ -49,11 +49,11 @@ public class OpenMeteoWeatherService implements WeatherService {
 
     for (int i = 0; i < timeNodes.size(); i++) {
       weatherDataList.add(new WeatherData(LocalDate.parse(timeNodes.get(i).asText()),
-              tempMinNodes.get(i).asDouble(),
-              tempMaxNodes.get(i).asDouble(),
-              appTempMinNodes.get(i).asDouble(),
-              appTempMaxNodes.get(i).asDouble(),
-              weatherCodeNodes.get(i).asInt()));
+          tempMinNodes.get(i).asDouble(),
+          tempMaxNodes.get(i).asDouble(),
+          appTempMinNodes.get(i).asDouble(),
+          appTempMaxNodes.get(i).asDouble(),
+          weatherCodeNodes.get(i).asInt()));
     }
 
     return weatherDataList;
@@ -61,7 +61,7 @@ public class OpenMeteoWeatherService implements WeatherService {
 
   private static String formatDailyData(WeatherData wd) {
     return String.format(DAY_TEMPLATE, wd.date, getWeatherIcon(wd.weatherCode),
-            wd.tempMin, wd.tempMax, wd.appTempMin, wd.appTempMax);
+        wd.tempMin, wd.tempMax, wd.appTempMin, wd.appTempMax);
   }
 
   private static String getWeatherIcon(Integer weatherCode) {
@@ -82,6 +82,7 @@ public class OpenMeteoWeatherService implements WeatherService {
     };
   }
 
-  private record WeatherData(LocalDate date, double tempMin, double tempMax, double appTempMin, double appTempMax, int weatherCode) {
+  private record WeatherData(LocalDate date, double tempMin, double tempMax, double appTempMin, double appTempMax,
+                             int weatherCode) {
   }
 }

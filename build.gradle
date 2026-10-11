@@ -27,6 +27,8 @@ dependencies {
 
   implementation 'org.jsoup:jsoup:1.23.2'
   implementation 'org.springframework.boot:spring-boot-starter'
+  implementation 'org.springframework.boot:spring-boot-starter-cache'
+  implementation 'com.github.ben-manes.caffeine:caffeine'
   implementation 'org.telegram:telegrambots-longpolling:10.3.0'
   implementation 'org.telegram:telegrambots-abilities:10.3.0'
   implementation 'org.telegram:telegrambots-client:10.3.0'
