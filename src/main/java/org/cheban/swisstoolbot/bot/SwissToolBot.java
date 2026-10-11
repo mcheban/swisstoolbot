@@ -24,12 +24,14 @@ import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.api.objects.InputFile;
 import org.telegram.telegrambots.meta.api.objects.Update;
 import org.telegram.telegrambots.meta.api.objects.media.InputMedia;
+import org.telegram.telegrambots.meta.api.objects.media.InputMediaPhoto;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.ReplyKeyboardMarkup;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.ReplyKeyboardRemove;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.KeyboardButton;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.KeyboardRow;
 import org.telegram.telegrambots.meta.generics.TelegramClient;
 
+import java.io.ByteArrayInputStream;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
@@ -185,12 +187,12 @@ public class SwissToolBot extends AbstractAbilityBot {
     if (results.isEmpty()) {
       this.sendText(ctx.chatId(), "No results");
     } else {
-      List<InputMedia> inputMedia = results.stream().map(this::buildImageMedia).toList();
+      List<InputMedia> inputMedia = results.stream().map(this::buildImageMediaWithData).toList();
       if (results.size() > 10 || !this.silentSendMediaGroup(SendMediaGroup.builder()
               .chatId(Long.toString(ctx.chatId()))
               .medias(inputMedia)
               .build())) {
-        results.forEach(img -> this.silentSendPhoto(this.buildSendPhoto(img)
+        results.forEach(img -> this.silentSendPhoto(this.buildSendPhotoWithData(img)
                 .chatId(Long.toString(ctx.chatId()))
                 .build()));
       }

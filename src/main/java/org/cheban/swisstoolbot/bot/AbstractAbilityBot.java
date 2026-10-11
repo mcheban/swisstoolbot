@@ -15,6 +15,8 @@ import org.telegram.telegrambots.meta.api.objects.media.InputMediaPhoto;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 import org.telegram.telegrambots.meta.generics.TelegramClient;
 
+import java.io.ByteArrayInputStream;
+
 @Slf4j
 public abstract class AbstractAbilityBot extends AbilityBot {
   private final long creatorId;
@@ -59,10 +61,28 @@ public abstract class AbstractAbilityBot extends AbilityBot {
             .build();
   }
 
+  protected InputMedia buildImageMediaWithData(ImageResult image) {
+    log.info("[buildImageMediaWithData] {}", image.src());
+
+    return InputMediaPhoto.builder()
+            .media(new ByteArrayInputStream(image.data()), image.src())
+            .caption(HtmlUtil.buildLink(image.url(), image.title()))
+            .parseMode("HTML")
+            .build();
+  }
+
   protected SendPhoto.SendPhotoBuilder<?,?> buildSendPhoto(ImageResult image) {
     log.info("[buildSendPhoto] {}", image.src());
     return SendPhoto.builder()
             .photo(new InputFile(image.src()))
+            .caption(HtmlUtil.buildLink(image.url(), image.title()))
+            .parseMode("HTML");
+  }
+
+  protected SendPhoto.SendPhotoBuilder<?,?> buildSendPhotoWithData(ImageResult image) {
+    log.info("[buildSendPhotoWithData] {}", image.src());
+    return SendPhoto.builder()
+            .photo(new InputFile(new ByteArrayInputStream(image.data()), "img.jpg"))
             .caption(HtmlUtil.buildLink(image.url(), image.title()))
             .parseMode("HTML");
   }

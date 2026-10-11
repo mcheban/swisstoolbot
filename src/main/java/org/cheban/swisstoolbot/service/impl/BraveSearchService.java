@@ -15,6 +15,7 @@ import org.springframework.stereotype.Service;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ForkJoinPool;
 
@@ -76,8 +77,10 @@ public class BraveSearchService implements WebSearchService {
             if (response != null && response.getResults() != null) {
                 results = response.getResults().parallelStream()
                         .limit(num * 2L)
-                        .map(r -> new ImageResult(r.getSrc(), r.getUrl(), r.getTitle()))
-                        .filter(im -> HttpUtil.imgExistsForTg(im.src()))
+                        .map(r -> HttpUtil.downloadImage(r.getSrc())
+                                .map(d -> new ImageResult(r.getSrc(), r.getUrl(), r.getTitle(), d))
+                                .orElse(null))
+                        .filter(Objects::nonNull)
                         .limit(num)
                         .toList();
             }

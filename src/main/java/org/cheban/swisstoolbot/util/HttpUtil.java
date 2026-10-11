@@ -3,22 +3,24 @@ package org.cheban.swisstoolbot.util;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStreamReader;
-import java.io.Reader;
+import java.io.*;
 import java.net.*;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Set;
+import java.time.Duration;
+import java.util.*;
 import java.util.function.Function;
 
 import lombok.experimental.UtilityClass;
 import org.apache.commons.io.IOUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import javax.imageio.ImageIO;
+import javax.imageio.ImageReader;
+import javax.imageio.stream.ImageInputStream;
 
 @UtilityClass
 public class HttpUtil {
@@ -35,13 +37,53 @@ public class HttpUtil {
   private static final Set<Integer> OK_STATUSES = Set.of(200, 301, 302, 303, 307, 308);
   private static final Set<String> SUPPORTED_IMAGES_TYPES = Set.of("image/bmp", "image/jpeg", "image/png", "image/gif", "image/webp");
 
+  private static final HttpClient HTTP = HttpClient.newBuilder()
+          .connectTimeout(Duration.ofSeconds(3))
+          .followRedirects(HttpClient.Redirect.NORMAL)
+          .version(HttpClient.Version.HTTP_1_1)   // avoids HTTP/2 quirks with some CDNs
+          .build();
+
+  private static final long LIMIT = 5L * 1024 * 1024;
+
+  public static Optional<byte[]> downloadImage(String url) {
+    try {
+      log.info("[downloadImage] Loading {} ...", url);
+
+      HttpRequest req = HttpRequest.newBuilder(URI.create(url))
+              .timeout(Duration.ofSeconds(5))
+              .header("User-Agent", USER_AGENT)
+              .header("Accept", ACCEPT_ALL)
+              .build();
+      HttpResponse<InputStream> resp = HTTP.send(req, HttpResponse.BodyHandlers.ofInputStream());
+      try (InputStream in = resp.body()) {
+        if (resp.statusCode() != 200) {
+          log.info("[downloadImage] [{}] Non 200 response: {}", url, resp.statusCode());
+          return Optional.empty();
+        }
+        String type = resp.headers().firstValue("Content-Type").orElse("")
+                .split(";")[0].trim().toLowerCase();
+        if (!type.startsWith("image/")) {
+          log.info("[downloadImage] [{}] Non image: {}", url, type);
+          return Optional.empty();
+        }
+        byte[] data = in.readNBytes((int) LIMIT + 1);
+        log.info("[downloadImage] [{}] Response: {}; Content-Type: {} ; Content-Length: {}",
+                url, resp.statusCode(), type, data.length);
+        return data.length > LIMIT ? Optional.empty() : Optional.of(data);
+      }
+    } catch (Exception e) {
+      log.warn("Download failed {}: {}", url, e.toString());
+      return Optional.empty();
+    }
+  }
+
   public static String urlEncode(String text) {
     return URLEncoder.encode(text, StandardCharsets.UTF_8);
   }
 
   public static <T> T getContent(String url, Map<String, String> headers, Function<Reader, T> responseTransformer) {
     try {
-      log.info("Making GET request: URL={}; Headers={}", url, headers);
+      log.debug("Making GET request: URL={}", url);
       HttpURLConnection con = connection(url, "GET", headers);
       if (con.getResponseCode() == 200) {
         try (BufferedReader in = new BufferedReader(new InputStreamReader(con.getInputStream()))) {
