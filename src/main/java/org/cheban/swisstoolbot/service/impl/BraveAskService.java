@@ -1,7 +1,6 @@
 package org.cheban.swisstoolbot.service.impl;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -9,6 +8,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.cheban.swisstoolbot.configuration.BotProperties;
 import org.cheban.swisstoolbot.service.AskService;
+import org.cheban.swisstoolbot.util.JsonUtil;
 import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Service;
 
@@ -28,7 +28,6 @@ public class BraveAskService implements AskService {
   private static final String API_URL = "https://api.search.brave.com/res/v1/chat/completions";
   private static final String MODEL = "brave";
 
-  private static final ObjectMapper MAPPER = new ObjectMapper();
   private static final HttpClient HTTP = HttpClient.newBuilder()
       .connectTimeout(Duration.ofSeconds(5))
       .build();
@@ -50,7 +49,7 @@ public class BraveAskService implements AskService {
           .header("Content-Type", "application/json")
           .header("Accept", "application/json")
           .header("X-Subscription-Token", botProperties.getBraveAnswersApiToken())
-          .POST(HttpRequest.BodyPublishers.ofString(MAPPER.writeValueAsString(body)))
+          .POST(HttpRequest.BodyPublishers.ofString(JsonUtil.serializeObject(body)))
           .build();
 
       HttpResponse<String> resp = HTTP.send(req, HttpResponse.BodyHandlers.ofString());
@@ -59,7 +58,7 @@ public class BraveAskService implements AskService {
         return errorMessage(resp);
       }
 
-      ChatResponse parsed = MAPPER.readValue(resp.body(), ChatResponse.class);
+      ChatResponse parsed = JsonUtil.parseObject(resp.body(), ChatResponse.class);
       return parsed.text().map(String::trim).filter(s -> !s.isEmpty()).orElse("No answer");
     } catch (InterruptedException e) {
       Thread.currentThread().interrupt();
@@ -72,7 +71,7 @@ public class BraveAskService implements AskService {
 
   private static String errorMessage(HttpResponse<String> resp) {
     try {
-      ErrorResponse err = MAPPER.readValue(resp.body(), ErrorResponse.class);
+      ErrorResponse err = JsonUtil.parseObject(resp.body(), ErrorResponse.class);
       if (err.getError() != null) {
         return "Could not get an answer: %s%s".formatted(
             err.getError().getCode() != null ? err.getError().getCode() : "HTTP " + resp.statusCode(),

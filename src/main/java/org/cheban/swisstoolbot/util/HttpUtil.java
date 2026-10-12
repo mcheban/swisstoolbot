@@ -3,25 +3,29 @@ package org.cheban.swisstoolbot.util;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 
-import java.io.*;
-import java.net.*;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.Reader;
+import java.io.UncheckedIOException;
+import java.net.URI;
+import java.net.URLEncoder;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
-import java.util.*;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
 import java.util.function.Function;
 
 import lombok.experimental.UtilityClass;
-import org.apache.commons.io.IOUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import javax.imageio.ImageIO;
-import javax.imageio.ImageReader;
-import javax.imageio.stream.ImageInputStream;
-
+@SuppressWarnings("unused")
 @UtilityClass
 public class HttpUtil {
   private static final Logger log = LoggerFactory.getLogger(HttpUtil.class);
@@ -33,8 +37,9 @@ public class HttpUtil {
   public static final String ACCEPT_ENCODING = "gzip, deflate, br";
 
   public static final Map<String, String> LOAD_JSON_HEADERS = Map.of("User-Agent", USER_AGENT, "Accept", ACCEPT_JSON);
+  // Accept-Encoding is safe on HEAD requests only: java.net.http does not decode gzip/deflate/br,
+  // so it must never be added to LOAD_JSON_HEADERS, otherwise JSON bodies would arrive compressed.
   public static final Map<String, String> URL_EXISTS_HEADERS = Map.of("User-Agent", TG_USER_AGENT, "Accept", ACCEPT_ALL, "Accept-Encoding", ACCEPT_ENCODING);
-  private static final Set<Integer> OK_STATUSES = Set.of(200, 301, 302, 303, 307, 308);
   private static final Set<String> SUPPORTED_IMAGES_TYPES = Set.of("image/bmp", "image/jpeg", "image/png", "image/gif", "image/webp");
 
   private static final HttpClient HTTP = HttpClient.newBuilder()
@@ -43,6 +48,7 @@ public class HttpUtil {
       .version(HttpClient.Version.HTTP_1_1)   // avoids HTTP/2 quirks with some CDNs
       .build();
 
+  private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(5);
   private static final long LIMIT = 5L * 1024 * 1024;
 
   public static String detectExtension(byte[] d) {
@@ -60,11 +66,7 @@ public class HttpUtil {
     try {
       log.info("[downloadImage] Loading {} ...", url);
 
-      HttpRequest req = HttpRequest.newBuilder(URI.create(url))
-          .timeout(Duration.ofSeconds(5))
-          .header("User-Agent", USER_AGENT)
-          .header("Accept", ACCEPT_ALL)
-          .build();
+      HttpRequest req = request(url, "GET", Map.of("User-Agent", USER_AGENT, "Accept", ACCEPT_ALL)).build();
       HttpResponse<InputStream> resp = HTTP.send(req, HttpResponse.BodyHandlers.ofInputStream());
       try (InputStream in = resp.body()) {
         if (resp.statusCode() != 200) {
@@ -85,6 +87,10 @@ public class HttpUtil {
         if (ext == null) return Optional.empty();
         return Optional.of(data);
       }
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
+      log.warn("Download interrupted: {}", url);
+      return Optional.empty();
     } catch (Exception e) {
       log.warn("Download failed {}: {}", url, e.toString());
       return Optional.empty();
@@ -98,15 +104,20 @@ public class HttpUtil {
   public static <T> T getContent(String url, Map<String, String> headers, Function<Reader, T> responseTransformer) {
     try {
       log.debug("Making GET request: URL={}", url);
-      HttpURLConnection con = connection(url, "GET", headers);
-      if (con.getResponseCode() == 200) {
-        try (BufferedReader in = new BufferedReader(new InputStreamReader(con.getInputStream()))) {
-          return responseTransformer.apply(in);
-        }
-      } else {
-        log.error("Got non-200 response: {} {}", con.getResponseCode(), con.getResponseMessage());
+      HttpResponse<InputStream> resp = HTTP.send(
+          request(url, "GET", headers).build(), HttpResponse.BodyHandlers.ofInputStream());
+      if (resp.statusCode() != 200) {
+        log.error("Got non-200 response: {}", resp.statusCode());
         return null;
       }
+      try (InputStream body = resp.body();
+           Reader in = new InputStreamReader(body, StandardCharsets.UTF_8)) {
+        return responseTransformer.apply(in);
+      }
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
+      log.error("GET interrupted: {}", url);
+      return null;
     } catch (Exception e) {
       log.error("Exception during GET", e);
       return null;
@@ -147,38 +158,50 @@ public class HttpUtil {
     log.info("[imgExistsForTg] {}", url);
 
     try {
-      HttpURLConnection con = connection(url, "HEAD", URL_EXISTS_HEADERS);
-      boolean ok = OK_STATUSES.contains(con.getResponseCode()) &&
-          SUPPORTED_IMAGES_TYPES.contains(con.getContentType()) &&
-          con.getContentLengthLong() < CONTENT_LENGTH_LIMIT;
-      log.info("[imgExistsForTg] [{}] Response: {} {}; Content-Type: {} ; Content-Length: {}",
-          url, con.getResponseCode(), con.getResponseMessage(), con.getContentType(), con.getContentLengthLong());
+      HttpResponse<Void> resp = HTTP.send(
+          request(url, "HEAD", URL_EXISTS_HEADERS).build(), HttpResponse.BodyHandlers.discarding());
+      String type = resp.headers().firstValue("Content-Type").orElse("")
+          .split(";")[0].trim().toLowerCase();
+      long len = resp.headers().firstValue("Content-Length").map(Long::parseLong).orElse(-1L);
+      boolean ok = resp.statusCode() == 200
+          && SUPPORTED_IMAGES_TYPES.contains(type)
+          && len < CONTENT_LENGTH_LIMIT;
+      log.info("[imgExistsForTg] [{}] Response: {}; Content-Type: {} ; Content-Length: {}",
+          url, resp.statusCode(), type, len);
       return ok;
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
+      return false;
     } catch (Exception e) {
       log.error("[imgExistsForTg] {} Exception during url check: {}", url, e.getMessage());
       return false;
     }
   }
 
-  private static String readerToString(Reader r) {
-    try {
-      return IOUtils.toString(r);
-    } catch (IOException e) {
-      throw new IllegalArgumentException(e);
+  private static HttpRequest.Builder request(String url, String method, Map<String, String> headers) {
+    HttpRequest.Builder builder = HttpRequest.newBuilder(URI.create(url)).timeout(REQUEST_TIMEOUT);
+    if ("GET".equals(method)) {
+      builder.GET();   // method("GET", noBody()) would add a Content-Length: 0 header
+    } else {
+      builder.method(method, HttpRequest.BodyPublishers.noBody());
     }
+    if (headers != null) {
+      headers.forEach(builder::header);
+    }
+    return builder;
   }
 
-  private static HttpURLConnection connection(String url, String method, Map<String, String> headers)
-      throws IOException, URISyntaxException {
-    HttpURLConnection con = (HttpURLConnection) (new URI(url).toURL()).openConnection();
-    con.setConnectTimeout(2000);
-    con.setReadTimeout(2000);
-    con.setRequestMethod(method);
-    if (headers != null) {
-      Objects.requireNonNull(con);
-      headers.forEach(con::setRequestProperty);
+  private static String readerToString(Reader r) {
+    try (r) {
+      StringBuilder sb = new StringBuilder();
+      char[] buf = new char[16_384];
+      int n;
+      while ((n = r.read(buf)) != -1) {
+        sb.append(buf, 0, n);
+      }
+      return sb.toString();
+    } catch (IOException e) {
+      throw new UncheckedIOException(e);
     }
-
-    return con;
   }
 }

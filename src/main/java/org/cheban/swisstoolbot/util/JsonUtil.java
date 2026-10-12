@@ -10,6 +10,7 @@ import java.io.IOException;
 import java.io.Reader;
 import java.util.List;
 
+@SuppressWarnings("unused")
 @UtilityClass
 public class JsonUtil {
   private static final ObjectMapper MAPPER = new ObjectMapper();
@@ -33,6 +34,22 @@ public class JsonUtil {
   public static <T> T parseObject(Reader r, Class<T> clazz) {
     try {
       return MAPPER.readValue(r, clazz);
+    } catch (IOException e) {
+      throw new IllegalArgumentException(e);
+    }
+  }
+
+  public static <T> T parseObject(String s, Class<T> clazz) {
+    try {
+      return MAPPER.readValue(s, clazz);
+    } catch (IOException e) {
+      throw new IllegalArgumentException(e);
+    }
+  }
+
+  public static <T> String serializeObject(T obj) {
+    try {
+      return MAPPER.writeValueAsString(obj);
     } catch (IOException e) {
       throw new IllegalArgumentException(e);
     }
