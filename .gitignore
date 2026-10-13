@@ -8,6 +8,9 @@ application-dev.yml
 application-prod.yml
 .env
 
+### AI assistant scratch (plans, sessions) ###
+.junie/
+
 ### IntelliJ IDEA ###
 .idea
 *.iws
