@@ -318,7 +318,7 @@ public class SwissToolBot extends AbstractAbilityBot {
   private void doSetLocation(MessageContext ctx) {
     if (ctx.arguments().length > 0) {
       String args = String.join(" ", ctx.arguments());
-      if (args.matches("-?\\\\d+(\\\\.\\\\d+)?,-?\\\\d+(\\\\.\\\\d+)?")) {
+      if (args.matches("-?\\d+(\\.\\d+)?,-?\\d+(\\.\\d+)?")) {
         String[] coords = args.split(",");
         Double lat = Double.valueOf(coords[0]);
         Double lon = Double.valueOf(coords[1]);
@@ -378,7 +378,7 @@ public class SwissToolBot extends AbstractAbilityBot {
 
     if (ctx.arguments().length > 0) {
       String args = String.join(" ", ctx.arguments());
-      if (args.matches("-?\\\\d+(\\\\.\\\\d+)?,-?\\\\d+(\\\\.\\\\d+)?")) {
+      if (args.matches("-?\\d+(\\.\\d+)?,-?\\d+(\\.\\d+)?")) {
         String[] coords = args.split(",");
         lat = Double.valueOf(coords[0]);
         lon = Double.valueOf(coords[1]);
