@@ -1,12 +1,12 @@
 package org.cheban.swisstoolbot.service.impl;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import jakarta.inject.Inject;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.cheban.swisstoolbot.service.ExchangeRateService;
 import org.cheban.swisstoolbot.util.HttpUtil;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.context.annotation.Primary;
@@ -32,7 +32,7 @@ public class FrankfurterExchangeRateService implements ExchangeRateService {
 
   // self-reference so @Cacheable goes through the Spring proxy (self-invocation bypasses it)
   @Lazy
-  @Inject
+  @Autowired
   private FrankfurterExchangeRateService self;
 
   @Override

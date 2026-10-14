@@ -4,7 +4,6 @@ import lombok.RequiredArgsConstructor;
 import org.telegram.telegrambots.abilitybots.api.db.DBContext;
 
 import java.util.Objects;
-import java.util.Optional;
 
 @RequiredArgsConstructor
 public class ContextDb {
@@ -12,10 +11,6 @@ public class ContextDb {
   private static final String LOCATION_LON = "LOCATION_LON";
   private static final String LOCATION_NAME = "LOCATION_NAME";
   private static final String LOCATION_KB_VISIBLE = "LOCATION_KB_VISIBLE";
-  private static final String SEARCH_NUM = "SEARCH_NUM";
-  private static final int SEARCH_DEFAULT = 5;
-  private static final String SEARCH_NUM_IMG = "SEARCH_NUM_IMG";
-  private static final int SEARCH_DEFAULT_IMG = 10;
 
   private final DBContext db;
   private final Long chatId;
@@ -58,20 +53,20 @@ public class ContextDb {
     return Objects.equals(getVar(LOCATION_KB_VISIBLE), true);
   }
 
-  public void setSearchNum(int num) {
-    setVar(SEARCH_NUM, num);
-  }
-
   public int getSearchNum() {
-    return Optional.<Integer>ofNullable(getVar(SEARCH_NUM)).orElse(SEARCH_DEFAULT);
-  }
-
-  public void setSearchNumImg(int num) {
-    setVar(SEARCH_NUM_IMG, num);
+    return (Integer) ConfigOption.SEARCH_NUM.getValue(this);
   }
 
   public int getSearchNumImg() {
-    return Optional.<Integer>ofNullable(getVar(SEARCH_NUM_IMG)).orElse(SEARCH_DEFAULT_IMG);
+    return (Integer) ConfigOption.SEARCH_NUM_IMG.getValue(this);
+  }
+
+  public <T> T getVar(ConfigOption opt) {
+    return getVar(opt.name());
+  }
+
+  public <T> void setVar(ConfigOption opt, T value) {
+    setVar(opt.name(), value);
   }
 
   public <T> T getVar(String name) {

@@ -10,6 +10,7 @@ import org.cheban.swisstoolbot.util.AbilityMethod;
 import org.cheban.swisstoolbot.util.HtmlUtil;
 import org.cheban.swisstoolbot.objects.ImageResult;
 import org.cheban.swisstoolbot.objects.WebResult;
+import org.cheban.swisstoolbot.util.LocationUtil;
 import org.cheban.swisstoolbot.util.MarkdownUtil;
 import org.cheban.swisstoolbot.util.ReplyMethod;
 import org.springframework.stereotype.Component;
@@ -318,11 +319,9 @@ public class SwissToolBot extends AbstractAbilityBot {
   private void doSetLocation(MessageContext ctx) {
     if (ctx.arguments().length > 0) {
       String args = String.join(" ", ctx.arguments());
-      if (args.matches("-?\\d+(\\.\\d+)?,-?\\d+(\\.\\d+)?")) {
-        String[] coords = args.split(",");
-        Double lat = Double.valueOf(coords[0]);
-        Double lon = Double.valueOf(coords[1]);
-        contextDb.updateLocationData(lat, lon, geocodeService.location(lat, lon));
+      LocationInfo loc = LocationUtil.parse(args, geocodeService::location);
+      if (loc != null) {
+        contextDb.updateLocationData(loc.lat(), loc.lon(), loc.name());
         this.silent.send("Successfully changed your location", ctx.chatId());
       } else {
         LocationInfo location = geocodeService.coordinates(args);
@@ -378,18 +377,14 @@ public class SwissToolBot extends AbstractAbilityBot {
 
     if (ctx.arguments().length > 0) {
       String args = String.join(" ", ctx.arguments());
-      if (args.matches("-?\\d+(\\.\\d+)?,-?\\d+(\\.\\d+)?")) {
-        String[] coords = args.split(",");
-        lat = Double.valueOf(coords[0]);
-        lon = Double.valueOf(coords[1]);
-        locName = geocodeService.location(lat, lon);
-      } else {
-        LocationInfo location = geocodeService.coordinates(args);
-        if (location != null) {
-          lat = location.lat();
-          lon = location.lon();
-          locName = location.name();
-        }
+      LocationInfo loc = LocationUtil.parse(args, geocodeService::location);
+      if (loc == null) {
+        loc = geocodeService.coordinates(args);
+      }
+      if (loc != null) {
+        lat = loc.lat();
+        lon = loc.lon();
+        locName = loc.name();
       }
     }
 

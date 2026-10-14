@@ -5,6 +5,7 @@ import lombok.RequiredArgsConstructor;
 
 import java.util.Arrays;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 @Getter
@@ -13,23 +14,23 @@ public enum ConfigOption {
   SEARCH_NUM(5) {
     @Override
     void setString(String value, ContextDb contextDb) {
-      contextDb.setSearchNum(Integer.parseInt(value));
+      contextDb.setVar(this, Integer.valueOf(value));
     }
 
     @Override
     String getString(ContextDb contextDb) {
-      return String.valueOf(contextDb.getSearchNum());
+      return String.valueOf(getValue(contextDb));
     }
   },
-  SEARCH_NUM_IMG(5) {
+  SEARCH_NUM_IMG(10) {
     @Override
     void setString(String value, ContextDb contextDb) {
-      contextDb.setSearchNumImg(Integer.parseInt(value));
+      contextDb.setVar(this, Integer.valueOf(value));
     }
 
     @Override
     String getString(ContextDb contextDb) {
-      return String.valueOf(contextDb.getSearchNumImg());
+      return String.valueOf(getValue(contextDb));
     }
   };
 
@@ -47,6 +48,10 @@ public enum ConfigOption {
   abstract void setString(String value, ContextDb contextDb);
 
   abstract String getString(ContextDb contextDb);
+
+  public Object getValue(ContextDb contextDb) {
+    return Optional.ofNullable(contextDb.getVar(this)).orElse(getDefaultValue());
+  }
 
   public String userName() {
     return name().toLowerCase();
