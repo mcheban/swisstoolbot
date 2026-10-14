@@ -21,6 +21,13 @@ repositories {
   mavenCentral()
 }
 
+configurations { mockitoAgent }
+
+// Spring Boot 4.1.1 pins jackson-2-bom to 2.21.5, which is affected by
+// CVE-2026-68497, CVE-2026-91777, CVE-2026-91776, CVE-2026-83557, CVE-2026-19032 (jackson-databind)
+// and CVE-2026-89407, CVE-2026-89425 (jackson-core). 2.21.7 is the fixed release of this line.
+ext['jackson-2-bom.version'] = '2.21.7'
+
 dependencies {
   compileOnly 'org.projectlombok:lombok:1.18.38'
   annotationProcessor 'org.projectlombok:lombok:1.18.38'
@@ -30,13 +37,29 @@ dependencies {
   implementation 'org.springframework.boot:spring-boot-starter-cache'
   implementation 'com.github.ben-manes.caffeine:caffeine'
   implementation 'org.telegram:telegrambots-longpolling:10.3.0'
-  implementation 'org.telegram:telegrambots-abilities:10.3.0'
+  implementation('org.telegram:telegrambots-abilities:10.3.0') {
+    // This bot runs on long polling and never uses AbilityWebhookBot, so the webhook stack is dead weight.
+    // Dropping it removes javalin/javalin-ssl and the BouncyCastle 1.83 it drags in, which is affected by
+    // CVE-2026-59642, CVE-2026-59639, CVE-2026-12802, CVE-2026-17508, CVE-2026-71888, CVE-2026-71889,
+    // CVE-2026-5588, CVE-2026-59647, CVE-2026-15055, CVE-2026-13586 (bcpkix),
+    // CVE-2026-59645 (bcutil), CVE-2026-8763, CVE-2026-59650, CVE-2026-58062, CVE-2026-58059,
+    // CVE-2026-58061, CVE-2026-12803, CVE-2026-58060, CVE-2026-12816, CVE-2026-14682, CVE-2026-13506 (bcprov).
+    exclude group: 'org.telegram', module: 'telegrambots-webhook'
+    // mapdb pulls the abandoned net.jpountz.lz4:lz4:1.3.0, affected by CVE-2025-66566; the maintained
+    // fork below is a drop-in replacement that keeps the net.jpountz.lz4/xxhash package names.
+    exclude group: 'net.jpountz.lz4', module: 'lz4'
+  }
+  // 1.11.4 is the fixed release for CVE-2026-106451, CVE-2026-59949, CVE-2026-106453, CVE-2026-106452,
+  // CVE-2026-106450 and CVE-2026-106449 (all >=1.8.1 <1.11.4) on top of CVE-2025-66566.
+  implementation 'at.yawk.lz4:lz4-java:1.11.4'
   implementation 'org.telegram:telegrambots-client:10.3.0'
 
   testImplementation 'org.springframework.boot:spring-boot-starter-test'
   testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+  mockitoAgent('org.mockito:mockito-core') { transitive = false }
 }
 
 tasks.named('test') {
   useJUnitPlatform()
+  jvmArgs "-javaagent:${configurations.mockitoAgent.asPath}"
 }
