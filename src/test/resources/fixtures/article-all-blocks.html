@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Fallback &lt;title&gt;</title>
+  <meta property="og:title" content="All blocks fixture">
+</head>
+<body>
+  <nav>navigation that must be removed</nav>
+  <header>page header that must be removed</header>
+  <article>
+    <h2>First heading</h2>
+    <p>Plain paragraph with <strong>bold</strong>, <em>italic</em>, <code>inline()</code>,
+      a <a href="/relative/path">relative link</a> and an <a href="https://example.com/abs">absolute link</a>.</p>
+    <p>Second paragraph with a line<br>break.</p>
+    <ul>
+      <li>First item</li>
+      <li>Second item with <b>bold</b>
+        <ul>
+          <li>Nested item</li>
+        </ul>
+      </li>
+    </ul>
+    <ol>
+      <li>Ordered one</li>
+      <li>Ordered two</li>
+    </ol>
+    <blockquote>
+      <p>Quoted paragraph.</p>
+    </blockquote>
+    <pre><code class="language-java">int x = 1;</code></pre>
+    <figure>
+      <img src="/img/relative.png" alt="Relative image">
+      <figcaption>A caption</figcaption>
+    </figure>
+    <img src="https://cdn.example.com/absolute.jpg" alt="Absolute image">
+    <table>
+      <thead>
+        <tr><th>Name</th><th>Value</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>alpha</td><td>1</td></tr>
+        <tr><td>beta</td><td>2</td></tr>
+      </tbody>
+    </table>
+    <section>
+      <div>Wrapped <span>text</span> in layout containers.</div>
+    </section>
+    <aside>aside clutter that must be removed</aside>
+    <form><input name="q"><button>form clutter that must be removed</button></form>
+    <iframe src="/frame">iframe fallback that must be removed</iframe>
+    <button>button clutter that must be removed</button>
+    <select><option>option clutter that must be removed</option></select>
+    <template><p>template clutter that must be removed</p></template>
+    <svg xmlns="http://www.w3.org/2000/svg"><title>svg clutter that must be removed</title><circle r="1"/></svg>
+    <math><mi>math clutter that must be removed</mi></math>
+    <canvas>canvas fallback that must be removed</canvas>
+    <video src="/v.mp4">video fallback that must be removed</video>
+    <audio src="/a.mp3">audio fallback that must be removed</audio>
+    <style>.ad { color: red; }</style>
+  </article>
+  <footer>page footer that must be removed</footer>
+</body>
+</html>

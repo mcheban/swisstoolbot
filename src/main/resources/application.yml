@@ -5,3 +5,19 @@ spring:
     cache-names: exchangeRates,fuelPrices
     caffeine:
       spec: expireAfterWrite=1h,maximumSize=500
+
+# Limits for the /web fetcher: it downloads pages the user hands it, so timeouts, body size and
+# redirect depth all have to be bounded. The cache keeps a URL's rendered result and the rate limit
+# caps how many fetches a chat (and the bot) may start per window.
+fetch:
+  connect-timeout-ms: 3000
+  read-timeout-ms: 5000
+  max-body-bytes: 5242880
+  max-redirects: 5
+  cache:
+    ttl: 30m
+    max-size: 200
+  rate-limit:
+    per-chat: 10
+    window: 1m
+    global: 100

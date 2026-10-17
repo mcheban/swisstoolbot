@@ -3,6 +3,11 @@ package org.cheban.swisstoolbot.bot;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import org.cheban.swisstoolbot.configuration.BotProperties;
+import org.cheban.swisstoolbot.fetch.FetchCache;
+import org.cheban.swisstoolbot.fetch.FetchError;
+import org.cheban.swisstoolbot.fetch.FetchOutcome;
+import org.cheban.swisstoolbot.fetch.FetchRateLimiter;
+import org.cheban.swisstoolbot.fetch.UrlFetchService;
 import org.cheban.swisstoolbot.objects.FuelPrice;
 import org.cheban.swisstoolbot.objects.LocationInfo;
 import org.cheban.swisstoolbot.service.*;
@@ -48,6 +53,8 @@ public class SwissToolBot extends AbstractAbilityBot {
   private static final String PROMPT_IMG = "Image search query:";
   private static final String PROMPT_EXCH = "Conversion input:";
   private static final String PROMPT_ASK = "Prompt:";
+  private static final String PROMPT_URL = "URL:";
+  private static final String FETCHING = "Fetching…";
 
   private final Set<Long> whitelist;
   private final GeocodeService geocodeService;
@@ -56,6 +63,9 @@ public class SwissToolBot extends AbstractAbilityBot {
   private final WeatherService weatherService;
   private final ExchangeRateService exchangeRateService;
   private final FuelPriceService fuelPriceService;
+  private final UrlFetchService urlFetchService;
+  private final FetchRateLimiter fetchRateLimiter;
+  private final FetchCache fetchCache;
   private ContextDb contextDb;
 
   public SwissToolBot(BotProperties botProperties,
@@ -65,7 +75,10 @@ public class SwissToolBot extends AbstractAbilityBot {
                       AskService askService,
                       WeatherService weatherService,
                       ExchangeRateService exchangeRateService,
-                      FuelPriceService fuelPriceService) {
+                      FuelPriceService fuelPriceService,
+                      UrlFetchService urlFetchService,
+                      FetchRateLimiter fetchRateLimiter,
+                      FetchCache fetchCache) {
     super(telegramClient, botProperties.getUsername(), botProperties.getCreatorId());
     this.whitelist = botProperties.getWhitelist();
     this.geocodeService = geocodeService;
@@ -74,6 +87,9 @@ public class SwissToolBot extends AbstractAbilityBot {
     this.exchangeRateService = exchangeRateService;
     this.fuelPriceService = fuelPriceService;
     this.askService = askService;
+    this.urlFetchService = urlFetchService;
+    this.fetchRateLimiter = fetchRateLimiter;
+    this.fetchCache = fetchCache;
   }
 
   @PostConstruct
@@ -93,6 +109,7 @@ public class SwissToolBot extends AbstractAbilityBot {
           .command(new BotCommand("fuel", "NB maximum fuel prices"))
           .command(new BotCommand("l", "Set user location"))
           .command(new BotCommand("doc", "Fetch document by URL"))
+          .command(new BotCommand("web", "Fetch web page by URL"))
           .build());
     } catch (TelegramApiException e) {
       log.error("Could not set commands", e);
@@ -157,6 +174,17 @@ public class SwissToolBot extends AbstractAbilityBot {
         .locality(Locality.ALL)
         .privacy(Privacy.PUBLIC)
         .action(this::doFetchDocument)
+        .build();
+  }
+
+  @AbilityMethod
+  public Ability web() {
+    return Ability.builder()
+        .name("web")
+        .info("Fetch web page by URL")
+        .locality(Locality.ALL)
+        .privacy(Privacy.PUBLIC)
+        .action(this::doWeb)
         .build();
   }
 
@@ -291,6 +319,56 @@ public class SwissToolBot extends AbstractAbilityBot {
         .chatId(Long.toString(ctx.chatId()))
         .document(new InputFile(String.join(" ", ctx.arguments())))
         .build());
+  }
+
+  private void doWeb(MessageContext ctx) {
+    if (!this.requireArguments(ctx, PROMPT_URL, "https://example.com/article")) return;
+    this.performWebFetch(ctx.chatId(), String.join(" ", ctx.arguments()));
+  }
+
+  @ReplyMethod
+  public Reply replyWeb() {
+    return this.promptReply(PROMPT_URL, this::performWebFetch);
+  }
+
+  private void performWebFetch(long chatId, String url) {
+    Integer messageId = this.sendTextAndGetId(chatId, FETCHING);
+    String reply = webReply(chatId, url.strip());
+    if (messageId == null) {
+      this.sendHtml(chatId, reply);
+    } else {
+      this.editHtml(chatId, messageId, reply);
+    }
+  }
+
+  /**
+   * Rate-limits first, then serves the URL through the cache so a repeated link is neither refetched
+   * nor published twice. Failure messages carry no markup, so one HTML reply covers every outcome.
+   */
+  private String webReply(long chatId, String url) {
+    if (!fetchRateLimiter.tryAcquire(chatId)) {
+      log.info("[web] Rate-limited chat {}", chatId);
+      return webErrorMessage(FetchError.RATE_LIMITED);
+    }
+    FetchOutcome outcome = fetchCache.getOrCompute(url, urlFetchService::fetch);
+    return switch (outcome) {
+      case FetchOutcome.Inline inline -> inline.html();
+      case FetchOutcome.Telegraph telegraph -> telegraph.url();
+      case FetchOutcome.Failure failure -> webErrorMessage(failure.error());
+    };
+  }
+
+  private static String webErrorMessage(FetchError error) {
+    return switch (error) {
+      case INVALID_URL -> "That does not look like a valid http(s) link.";
+      case BLOCKED_URL -> "That URL is blocked for security reasons.";
+      case FETCH_FAILED -> "Could not fetch that page.";
+      case NOT_HTML -> "That link is not an HTML page.";
+      case TOO_LARGE -> "That page is too large to fetch.";
+      case EMPTY_CONTENT -> "No readable content found: the page may need JavaScript or a subscription.";
+      case RATE_LIMITED -> "Too many requests, please try again in a moment.";
+      case TELEGRAPH_FAILED -> "Could not prepare that page for reading.";
+    };
   }
 
   private void doDefaultReply(MessageContext ctx) {

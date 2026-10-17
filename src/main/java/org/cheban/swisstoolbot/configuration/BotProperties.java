@@ -23,4 +23,5 @@ public class BotProperties {
   private String openWeatherMapToken;
   private String braveSearchApiToken;
   private String braveAnswersApiToken;
+  private String telegraphToken;
 }

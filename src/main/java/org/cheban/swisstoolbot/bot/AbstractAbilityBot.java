@@ -12,10 +12,12 @@ import org.telegram.telegrambots.meta.api.methods.send.SendDocument;
 import org.telegram.telegrambots.meta.api.methods.send.SendMediaGroup;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.api.methods.send.SendPhoto;
+import org.telegram.telegrambots.meta.api.methods.updatingmessages.EditMessageText;
 import org.telegram.telegrambots.meta.api.objects.InputFile;
 import org.telegram.telegrambots.meta.api.objects.LinkPreviewOptions;
 import org.telegram.telegrambots.meta.api.objects.media.InputMedia;
 import org.telegram.telegrambots.meta.api.objects.media.InputMediaPhoto;
+import org.telegram.telegrambots.meta.api.objects.message.Message;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.ForceReplyKeyboard;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 import org.telegram.telegrambots.meta.generics.TelegramClient;
@@ -93,6 +95,39 @@ public abstract class AbstractAbilityBot extends AbilityBot {
         .parseMode(ParseMode.MARKDOWNV2)
         .linkPreviewOptions(LinkPreviewOptions.builder().isDisabled(true).build())
         .build());
+  }
+
+  /**
+   * Sends a plain-text message and returns its id, so the caller can later replace it in place.
+   *
+   * @return the id of the sent message, or {@code null} when Telegram rejected it
+   */
+  protected Integer sendTextAndGetId(Long chatId, String msg) {
+    try {
+      Message sent = this.telegramClient.execute(SendMessage.builder()
+          .chatId(Long.toString(chatId))
+          .text(msg)
+          .build());
+      return sent == null ? null : sent.getMessageId();
+    } catch (TelegramApiException e) {
+      log.error("Could not send message", e);
+      return null;
+    }
+  }
+
+  /** Replaces an earlier message with HTML, so long-running requests do not spam the chat. */
+  protected void editHtml(Long chatId, Integer messageId, String msgHtml) {
+    try {
+      this.telegramClient.execute(EditMessageText.builder()
+          .chatId(Long.toString(chatId))
+          .messageId(messageId)
+          .text(msgHtml)
+          .parseMode(ParseMode.HTML)
+          .linkPreviewOptions(LinkPreviewOptions.builder().isDisabled(true).build())
+          .build());
+    } catch (TelegramApiException e) {
+      log.error("Could not edit message", e);
+    }
   }
 
   protected InputMedia buildImageMedia(ImageResult image) {
