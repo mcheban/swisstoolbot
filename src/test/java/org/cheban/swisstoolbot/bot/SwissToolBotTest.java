@@ -46,6 +46,7 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Function;
 import java.util.stream.Stream;
@@ -569,6 +570,32 @@ class SwissToolBotTest {
 
     verify(askService).ask("hello");
     verifyNoInteractions(urlFetchService);
+  }
+
+  @Test
+  @DisplayName("/s keeps only the configured number of pending fetch buttons")
+  void webSearchPrunesOlderFetchButtons() {
+    botProperties.setWebFetchHistory(2);
+    AtomicInteger messageIds = new AtomicInteger(100);
+    try {
+      lenient().when(telegramClient.execute(any(SendMessage.class))).thenAnswer(_ -> {
+        Message message = new Message();
+        message.setMessageId(messageIds.getAndIncrement());
+        return message;
+      });
+    } catch (Exception e) {
+      throw new IllegalStateException(e);
+    }
+    when(webSearchService.search(anyString(), anyInt()))
+        .thenReturn(List.of(new WebResult("https://example.com/a", "A", "d")));
+
+    swissToolBot.webSearch().action().accept(contextWithArguments("one"));
+    swissToolBot.webSearch().action().accept(contextWithArguments("two"));
+    swissToolBot.webSearch().action().accept(contextWithArguments("three"));
+
+    assertThat(contextDb.removeWebFetchUrl(100)).isNull();
+    assertThat(contextDb.removeWebFetchUrl(101)).isEqualTo("https://example.com/a");
+    assertThat(contextDb.removeWebFetchUrl(102)).isEqualTo("https://example.com/a");
   }
 
   @Test

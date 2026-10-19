@@ -6,6 +6,10 @@ spring:
     caffeine:
       spec: expireAfterWrite=1h,maximumSize=500
 
+# How many search-result messages per chat keep a working "🌐 Fetch" button.
+bot:
+  web-fetch-history: 20
+
 # Limits for the /web fetcher: it downloads pages the user hands it, so timeouts, body size and
 # redirect depth all have to be bounded. The cache keeps a URL's rendered result and the rate limit
 # caps how many fetches a chat (and the bot) may start per window. max-messages bounds how many

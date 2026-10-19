@@ -45,7 +45,6 @@ import org.telegram.telegrambots.meta.generics.TelegramClient;
 
 import java.util.Arrays;
 import java.util.List;
-import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
@@ -64,7 +63,6 @@ public class SwissToolBot extends AbstractAbilityBot {
   private static final String FETCH_BUTTON = "🌐 Fetch";
   private static final String FETCH_CALLBACK = "web-fetch";
 
-  private final Set<Long> whitelist;
   private final GeocodeService geocodeService;
   private final WebSearchService webSearchService;
   private final AskService askService;
@@ -74,6 +72,7 @@ public class SwissToolBot extends AbstractAbilityBot {
   private final UrlFetchService urlFetchService;
   private final FetchRateLimiter fetchRateLimiter;
   private final FetchCache fetchCache;
+  private final BotProperties botProperties;
   private ContextDb contextDb;
 
   public SwissToolBot(BotProperties botProperties,
@@ -88,7 +87,7 @@ public class SwissToolBot extends AbstractAbilityBot {
                       FetchRateLimiter fetchRateLimiter,
                       FetchCache fetchCache) {
     super(telegramClient, botProperties.getUsername(), botProperties.getCreatorId());
-    this.whitelist = botProperties.getWhitelist();
+    this.botProperties = botProperties;
     this.geocodeService = geocodeService;
     this.webSearchService = webSearchService;
     this.weatherService = weatherService;
@@ -133,7 +132,7 @@ public class SwissToolBot extends AbstractAbilityBot {
   @Override
   protected boolean checkGlobalFlags(Update update) {
     Long userId = AbilityUtils.getUser(update).getId();
-    if (!whitelist.contains(userId)) {
+    if (!botProperties.getWhitelist().contains(userId)) {
       log.error("Permission denied for: {}", userId);
       this.sendText(AbilityUtils.getChatId(update), "Permission denied for " + userId);
       return false;
@@ -288,6 +287,7 @@ public class SwissToolBot extends AbstractAbilityBot {
       this.sendText(chatId, "No results");
       return;
     }
+    contextDb.pruneWebFetchUrls(botProperties.getWebFetchHistory() - results.size());
     for (WebResult result : results) {
       Integer messageId = this.sendHtmlAndGetId(chatId,
           HtmlUtil.buildLink(result.url(), result.title()) + "\n\n" + result.description(),

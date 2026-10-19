@@ -3,6 +3,9 @@ package org.cheban.swisstoolbot.bot;
 import lombok.RequiredArgsConstructor;
 import org.telegram.telegrambots.abilitybots.api.db.DBContext;
 
+import java.util.Comparator;
+import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 @RequiredArgsConstructor
@@ -70,6 +73,26 @@ public class ContextDb {
   /** Consumes the URL behind a search-result button; returns {@code null} when the button is stale. */
   public String removeWebFetchUrl(int messageId) {
     return this.db.<String, String>getMap(WEB_FETCH_URLS).remove(webFetchKey(messageId));
+  }
+
+  /**
+   * Keeps only the {@code keep} newest pending fetch buttons of this chat and drops the rest. Message
+   * ids grow monotonically, so the largest ids are the newest; anything skipped is a stale button
+   * whose URL is no longer needed.
+   */
+  public void pruneWebFetchUrls(int keep) {
+    Map<String, String> urls = this.db.getMap(WEB_FETCH_URLS);
+    String prefix = dbKey("web-fetch:");
+    List<String> stale = urls.keySet().stream()
+        .filter(key -> key.startsWith(prefix))
+        .sorted(Comparator.comparingInt(ContextDb::messageIdOf).reversed())
+        .skip(Math.max(0, keep))
+        .toList();
+    stale.forEach(urls::remove);
+  }
+
+  private static int messageIdOf(String key) {
+    return Integer.parseInt(key.substring(key.lastIndexOf(':') + 1));
   }
 
   private String webFetchKey(int messageId) {
