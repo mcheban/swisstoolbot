@@ -28,11 +28,16 @@ import org.telegram.telegrambots.meta.api.methods.send.SendMediaGroup;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.api.objects.InputFile;
 import org.telegram.telegrambots.meta.api.objects.Update;
+import org.telegram.telegrambots.meta.api.objects.CallbackQuery;
 import org.telegram.telegrambots.meta.api.objects.commands.BotCommand;
 import org.telegram.telegrambots.meta.api.objects.media.InputMedia;
+import org.telegram.telegrambots.meta.api.objects.message.MaybeInaccessibleMessage;
 import org.telegram.telegrambots.meta.api.objects.message.Message;
+import org.telegram.telegrambots.meta.api.objects.replykeyboard.InlineKeyboardMarkup;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.ReplyKeyboardMarkup;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.ReplyKeyboardRemove;
+import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardButton;
+import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardRow;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.KeyboardButton;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.KeyboardRow;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
@@ -56,6 +61,8 @@ public class SwissToolBot extends AbstractAbilityBot {
   private static final String PROMPT_ASK = "Prompt:";
   private static final String PROMPT_URL = "URL:";
   private static final String FETCHING = "Fetching…";
+  private static final String FETCH_BUTTON = "🌐 Fetch";
+  private static final String FETCH_CALLBACK = "web-fetch";
 
   private final Set<Long> whitelist;
   private final GeocodeService geocodeService;
@@ -279,10 +286,47 @@ public class SwissToolBot extends AbstractAbilityBot {
     List<WebResult> results = webSearchService.search(query, contextDb.getSearchNum());
     if (results.isEmpty()) {
       this.sendText(chatId, "No results");
-    } else {
-      results.forEach(r ->
-          this.sendHtml(chatId, HtmlUtil.buildLink(r.url(), r.title()) + "\n\n" + r.description()));
+      return;
     }
+    for (WebResult result : results) {
+      Integer messageId = this.sendHtmlAndGetId(chatId,
+          HtmlUtil.buildLink(result.url(), result.title()) + "\n\n" + result.description(),
+          fetchKeyboard());
+      if (messageId != null) {
+        contextDb.putWebFetchUrl(messageId, result.url());
+      }
+    }
+  }
+
+  private static InlineKeyboardMarkup fetchKeyboard() {
+    return InlineKeyboardMarkup.builder()
+        .keyboardRow(new InlineKeyboardRow(InlineKeyboardButton.builder()
+            .text(FETCH_BUTTON)
+            .callbackData(FETCH_CALLBACK)
+            .build()))
+        .build();
+  }
+
+  /** Fetches the search result whose "🌐 Fetch" button was pressed. */
+  public Reply fetchWebCallback() {
+    return Reply.of((_, update) -> handleFetchCallback(update),
+        Flag.CALLBACK_QUERY,
+        update -> FETCH_CALLBACK.equals(update.getCallbackQuery().getData()));
+  }
+
+  private void handleFetchCallback(Update update) {
+    CallbackQuery callback = update.getCallbackQuery();
+    this.answerCallbackQuery(callback.getId());
+    MaybeInaccessibleMessage message = callback.getMessage();
+    if (message == null) {
+      return;
+    }
+    String url = contextDb.removeWebFetchUrl(message.getMessageId());
+    if (url == null) {
+      return;
+    }
+    this.clearKeyboard(message.getChatId(), message.getMessageId());
+    this.performWebFetch(message.getChatId(), url);
   }
 
   private void doImageSearch(MessageContext ctx) {

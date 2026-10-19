@@ -7,6 +7,7 @@ import org.cheban.swisstoolbot.fetch.FetchOutcome;
 import org.cheban.swisstoolbot.fetch.FetchRateLimiter;
 import org.cheban.swisstoolbot.fetch.UrlFetchService;
 import org.cheban.swisstoolbot.objects.LocationInfo;
+import org.cheban.swisstoolbot.objects.WebResult;
 import org.cheban.swisstoolbot.service.AskService;
 import org.cheban.swisstoolbot.service.ExchangeRateService;
 import org.cheban.swisstoolbot.service.FuelPriceService;
@@ -31,10 +32,12 @@ import org.telegram.telegrambots.meta.api.methods.ParseMode;
 import org.telegram.telegrambots.meta.api.methods.send.SendDocument;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.api.methods.updatingmessages.EditMessageText;
+import org.telegram.telegrambots.meta.api.objects.CallbackQuery;
 import org.telegram.telegrambots.meta.api.objects.Update;
 import org.telegram.telegrambots.meta.api.objects.User;
 import org.telegram.telegrambots.meta.api.objects.chat.Chat;
 import org.telegram.telegrambots.meta.api.objects.message.Message;
+import org.telegram.telegrambots.meta.api.objects.replykeyboard.InlineKeyboardMarkup;
 import org.telegram.telegrambots.meta.generics.TelegramClient;
 
 import java.io.IOException;
@@ -50,6 +53,7 @@ import java.util.stream.Stream;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyDouble;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -172,6 +176,22 @@ class SwissToolBotTest {
     return MessageContext.newContext(update, user, chatId, swissToolBot);
   }
 
+  private Update callbackUpdate(int messageId, String data) {
+    Chat chat = new Chat(chatId, "private");
+    User user = new User(USER_ID, "tester", false);
+    Message message = new Message();
+    message.setMessageId(messageId);
+    message.setChat(chat);
+    CallbackQuery callback = new CallbackQuery();
+    callback.setId("callback-1");
+    callback.setFrom(user);
+    callback.setMessage(message);
+    callback.setData(data);
+    Update update = new Update();
+    update.setCallbackQuery(callback);
+    return update;
+  }
+
   private SendMessage sentMessage() {
     ArgumentCaptor<SendMessage> captor = ArgumentCaptor.forClass(SendMessage.class);
     try {
@@ -207,7 +227,7 @@ class SwissToolBotTest {
     Message message = new Message();
     message.setMessageId(FETCHING_MESSAGE_ID);
     try {
-      when(telegramClient.execute(any(SendMessage.class))).thenReturn(message);
+      lenient().when(telegramClient.execute(any(SendMessage.class))).thenReturn(message);
     } catch (Exception e) {
       throw new IllegalStateException(e);
     }
@@ -549,6 +569,57 @@ class SwissToolBotTest {
 
     verify(askService).ask("hello");
     verifyNoInteractions(urlFetchService);
+  }
+
+  @Test
+  @DisplayName("/s sends every result with a 🌐 Fetch inline button that maps to its URL")
+  void webSearchAddsFetchButtons() {
+    when(webSearchService.search(eq("cats"), anyInt())).thenReturn(List.of(
+        new WebResult("https://example.com/a", "A", "First"),
+        new WebResult("https://example.com/b", "B", "Second")));
+
+    swissToolBot.webSearch().action().accept(contextWithArguments("cats"));
+
+    List<SendMessage> messages = sentMessages();
+    assertThat(messages).hasSize(2);
+    assertThat(messages).allSatisfy(message -> {
+      assertThat(message.getReplyMarkup()).isInstanceOf(InlineKeyboardMarkup.class);
+      InlineKeyboardMarkup markup = (InlineKeyboardMarkup) message.getReplyMarkup();
+      assertThat(markup.getKeyboard()).hasSize(1);
+      assertThat(markup.getKeyboard().getFirst()).hasSize(1);
+      assertThat(markup.getKeyboard().getFirst().getFirst().getText()).isEqualTo("🌐 Fetch");
+      assertThat(markup.getKeyboard().getFirst().getFirst().getCallbackData()).isEqualTo("web-fetch");
+    });
+  }
+
+  @Test
+  @DisplayName("pressing a 🌐 Fetch button fetches the URL registered for that result message")
+  void fetchButtonCallbackFetchesUrl() {
+    stubFetchingPrompt();
+    stubWebPipeline();
+    when(urlFetchService.fetch("https://example.com/a"))
+        .thenReturn(new FetchOutcome.Inline(List.of("<b>A</b>")));
+    contextDb.putWebFetchUrl(77, "https://example.com/a");
+
+    swissToolBot.fetchWebCallback().action().accept(swissToolBot, callbackUpdate(77, "web-fetch"));
+
+    assertThat(editedMessages()).singleElement()
+        .extracting(EditMessageText::getText).isEqualTo("<b>A</b>");
+  }
+
+  @Test
+  @DisplayName("a stale or unknown 🌐 Fetch callback never fetches")
+  void staleFetchCallbackDoesNotFetch() {
+    swissToolBot.fetchWebCallback().action().accept(swissToolBot, callbackUpdate(999, "web-fetch"));
+
+    verifyNoInteractions(urlFetchService, fetchCache);
+  }
+
+  @Test
+  @DisplayName("the 🌐 Fetch reply only matches the web-fetch callback payload")
+  void fetchCallbackOnlyMatchesItsPayload() {
+    assertThat(swissToolBot.fetchWebCallback().isOkFor(callbackUpdate(77, "web-fetch"))).isTrue();
+    assertThat(swissToolBot.fetchWebCallback().isOkFor(callbackUpdate(77, "other"))).isFalse();
   }
 
   @Test

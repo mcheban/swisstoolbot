@@ -11,6 +11,7 @@ public class ContextDb {
   private static final String LOCATION_LON = "LOCATION_LON";
   private static final String LOCATION_NAME = "LOCATION_NAME";
   private static final String LOCATION_KB_VISIBLE = "LOCATION_KB_VISIBLE";
+  private static final String WEB_FETCH_URLS = "WEB_FETCH_URLS";
 
   private final DBContext db;
   private final Long chatId;
@@ -59,6 +60,20 @@ public class ContextDb {
 
   public int getSearchNumImg() {
     return (Integer) ConfigOption.SEARCH_NUM_IMG.getValue(this);
+  }
+
+  /** Remembers which URL the "🌐 Fetch" button of a search-result message points at. */
+  public void putWebFetchUrl(int messageId, String url) {
+    this.db.<String, String>getMap(WEB_FETCH_URLS).put(webFetchKey(messageId), url);
+  }
+
+  /** Consumes the URL behind a search-result button; returns {@code null} when the button is stale. */
+  public String removeWebFetchUrl(int messageId) {
+    return this.db.<String, String>getMap(WEB_FETCH_URLS).remove(webFetchKey(messageId));
+  }
+
+  private String webFetchKey(int messageId) {
+    return dbKey("web-fetch:" + messageId);
   }
 
   public <T> T getVar(ConfigOption opt) {

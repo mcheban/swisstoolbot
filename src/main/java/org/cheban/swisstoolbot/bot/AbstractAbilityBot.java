@@ -7,11 +7,13 @@ import org.telegram.telegrambots.abilitybots.api.bot.AbilityBot;
 import org.telegram.telegrambots.abilitybots.api.objects.Flag;
 import org.telegram.telegrambots.abilitybots.api.objects.MessageContext;
 import org.telegram.telegrambots.abilitybots.api.objects.Reply;
+import org.telegram.telegrambots.meta.api.methods.AnswerCallbackQuery;
 import org.telegram.telegrambots.meta.api.methods.ParseMode;
 import org.telegram.telegrambots.meta.api.methods.send.SendDocument;
 import org.telegram.telegrambots.meta.api.methods.send.SendMediaGroup;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.api.methods.send.SendPhoto;
+import org.telegram.telegrambots.meta.api.methods.updatingmessages.EditMessageReplyMarkup;
 import org.telegram.telegrambots.meta.api.methods.updatingmessages.EditMessageText;
 import org.telegram.telegrambots.meta.api.objects.InputFile;
 import org.telegram.telegrambots.meta.api.objects.LinkPreviewOptions;
@@ -19,10 +21,13 @@ import org.telegram.telegrambots.meta.api.objects.media.InputMedia;
 import org.telegram.telegrambots.meta.api.objects.media.InputMediaPhoto;
 import org.telegram.telegrambots.meta.api.objects.message.Message;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.ForceReplyKeyboard;
+import org.telegram.telegrambots.meta.api.objects.replykeyboard.InlineKeyboardMarkup;
+import org.telegram.telegrambots.meta.api.objects.replykeyboard.ReplyKeyboard;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 import org.telegram.telegrambots.meta.generics.TelegramClient;
 
 import java.io.ByteArrayInputStream;
+import java.util.List;
 import java.util.function.BiConsumer;
 
 @Slf4j
@@ -80,12 +85,32 @@ public abstract class AbstractAbilityBot extends AbilityBot {
   }
 
   protected void sendHtml(Long chatId, String msgHtml) {
-    this.silent.execute(SendMessage.builder()
+    this.silent.execute(htmlMessage(chatId, msgHtml, null));
+  }
+
+  /**
+   * Sends an HTML message and returns its id, so the caller can later edit it or clear its keyboard.
+   *
+   * @return the id of the sent message, or {@code null} when Telegram rejected it
+   */
+  protected Integer sendHtmlAndGetId(Long chatId, String msgHtml, ReplyKeyboard replyMarkup) {
+    try {
+      Message sent = this.telegramClient.execute(htmlMessage(chatId, msgHtml, replyMarkup));
+      return sent == null ? null : sent.getMessageId();
+    } catch (TelegramApiException e) {
+      log.error("Could not send message", e);
+      return null;
+    }
+  }
+
+  private static SendMessage htmlMessage(Long chatId, String msgHtml, ReplyKeyboard replyMarkup) {
+    return SendMessage.builder()
         .chatId(Long.toString(chatId))
         .text(msgHtml)
         .parseMode(ParseMode.HTML)
         .linkPreviewOptions(LinkPreviewOptions.builder().isDisabled(true).build())
-        .build());
+        .replyMarkup(replyMarkup)
+        .build();
   }
 
   @SuppressWarnings("unused")
@@ -129,6 +154,20 @@ public abstract class AbstractAbilityBot extends AbilityBot {
     } catch (TelegramApiException e) {
       log.error("Could not edit message", e);
     }
+  }
+
+  /** Acknowledges a callback query so the client stops showing its loading indicator. */
+  protected void answerCallbackQuery(String callbackQueryId) {
+    this.silent.execute(AnswerCallbackQuery.builder().callbackQueryId(callbackQueryId).build());
+  }
+
+  /** Removes the inline keyboard from a message, e.g. after one of its buttons was used. */
+  protected void clearKeyboard(Long chatId, Integer messageId) {
+    this.silent.execute(EditMessageReplyMarkup.builder()
+        .chatId(Long.toString(chatId))
+        .messageId(messageId)
+        .replyMarkup(InlineKeyboardMarkup.builder().keyboard(List.of()).build())
+        .build());
   }
 
   @SuppressWarnings("unused")

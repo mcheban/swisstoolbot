@@ -42,8 +42,8 @@ class TelegramRendererTest {
     List<String> messages = renderer.render(document(paragraphs(40, 120)));
 
     assertThat(messages).hasSize(2);
-    assertThat(messages.get(0)).startsWith(HEADER + " 1/2\n\n");
-    assertThat(messages.get(1)).startsWith(HEADER + " 2/2\n\n");
+    assertThat(messages.get(0)).startsWith(HEADER + " [1/2]\n\n");
+    assertThat(messages.get(1)).startsWith(HEADER + " [2/2]\n\n");
     assertThat(messages).allSatisfy(message -> assertThat(message).hasSizeLessThanOrEqualTo(TelegramRenderer.MAX_MESSAGE_LENGTH));
   }
 
@@ -55,8 +55,8 @@ class TelegramRendererTest {
     List<String> messages = limited.render(document(paragraphs(300, 120)));
 
     assertThat(messages).hasSize(2);
-    assertThat(messages.get(0)).startsWith(HEADER + " 1/2\n\n");
-    assertThat(messages.get(1)).startsWith(HEADER + " 2/2\n\n")
+    assertThat(messages.get(0)).startsWith(HEADER + " [1/2]\n\n");
+    assertThat(messages.get(1)).startsWith(HEADER + " [2/2]\n\n")
         .endsWith(TelegramRenderer.TRUNCATION_MARKER.trim());
     assertThat(messages).allSatisfy(message -> assertThat(message).hasSizeLessThanOrEqualTo(TelegramRenderer.MAX_MESSAGE_LENGTH));
   }
