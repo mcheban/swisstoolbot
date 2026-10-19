@@ -159,6 +159,19 @@ class SwissToolBotTest {
     return MessageContext.newContext(update, user, chatId, swissToolBot, arguments);
   }
 
+  private MessageContext contextWithText(String text) {
+    Chat chat = new Chat(chatId, "private");
+    User user = new User(USER_ID, "tester", false);
+    Message message = new Message();
+    message.setMessageId(7);
+    message.setChat(chat);
+    message.setFrom(user);
+    message.setText(text);
+    Update update = new Update();
+    update.setMessage(message);
+    return MessageContext.newContext(update, user, chatId, swissToolBot);
+  }
+
   private SendMessage sentMessage() {
     ArgumentCaptor<SendMessage> captor = ArgumentCaptor.forClass(SendMessage.class);
     try {
@@ -398,7 +411,7 @@ class SwissToolBotTest {
   void webTrimsTheUrl() {
     stubFetchingPrompt();
     stubWebPipeline();
-    when(urlFetchService.fetch(WEB_URL)).thenReturn(new FetchOutcome.Inline("<b>Title</b>"));
+    when(urlFetchService.fetch(WEB_URL)).thenReturn(new FetchOutcome.Inline(List.of("<b>Title</b>")));
 
     swissToolBot.web().action().accept(contextWithArguments(" ", WEB_URL, " "));
 
@@ -410,7 +423,7 @@ class SwissToolBotTest {
   void webWithInlineResultEditsTheFetchingMessage() {
     stubFetchingPrompt();
     stubWebPipeline();
-    when(urlFetchService.fetch(WEB_URL)).thenReturn(new FetchOutcome.Inline("<b>Title</b>\n\nBody"));
+    when(urlFetchService.fetch(WEB_URL)).thenReturn(new FetchOutcome.Inline(List.of("<b>Title</b>\n\nBody")));
 
     swissToolBot.web().action().accept(contextWithArguments(WEB_URL));
 
@@ -424,16 +437,20 @@ class SwissToolBotTest {
   }
 
   @Test
-  @DisplayName("/web edits the message with the telegra.ph link when the page is too rich")
-  void webWithTelegraphResultEditsWithTheLink() {
+  @DisplayName("/web edits the first rendered page and sends the remaining pages as new messages")
+  void webWithMultipleMessagesEditsAndSendsTheRest() {
     stubFetchingPrompt();
     stubWebPipeline();
-    when(urlFetchService.fetch(WEB_URL)).thenReturn(new FetchOutcome.Telegraph("https://telegra.ph/Page-10-17"));
+    when(urlFetchService.fetch(WEB_URL))
+        .thenReturn(new FetchOutcome.Inline(List.of("page 1", "page 2")));
 
     swissToolBot.web().action().accept(contextWithArguments(WEB_URL));
 
     assertThat(editedMessages()).singleElement()
-        .extracting(EditMessageText::getText).isEqualTo("https://telegra.ph/Page-10-17");
+        .extracting(EditMessageText::getText).isEqualTo("page 1");
+    List<SendMessage> sent = sentMessages();
+    assertThat(sent.getLast().getText()).isEqualTo("page 2");
+    assertThat(sent.getLast().getParseMode()).isEqualTo(ParseMode.HTML);
   }
 
   @Test
@@ -458,7 +475,7 @@ class SwissToolBotTest {
   @DisplayName("/web sends the result as a new message when the Fetching prompt has no id")
   void webSendsTheResultWhenThePromptHasNoId() {
     stubWebPipeline();
-    when(urlFetchService.fetch(WEB_URL)).thenReturn(new FetchOutcome.Inline("<b>Title</b>"));
+    when(urlFetchService.fetch(WEB_URL)).thenReturn(new FetchOutcome.Inline(List.of("<b>Title</b>")));
 
     swissToolBot.web().action().accept(contextWithArguments(WEB_URL));
 
@@ -486,7 +503,7 @@ class SwissToolBotTest {
   void webServesRequestsThroughTheCache() {
     stubFetchingPrompt();
     when(fetchRateLimiter.tryAcquire(anyLong())).thenReturn(true);
-    when(fetchCache.getOrCompute(eq(WEB_URL), any())).thenReturn(new FetchOutcome.Inline("<b>Cached</b>"));
+    when(fetchCache.getOrCompute(eq(WEB_URL), any())).thenReturn(new FetchOutcome.Inline(List.of("<b>Cached</b>")));
 
     swissToolBot.web().action().accept(contextWithArguments(WEB_URL));
     swissToolBot.web().action().accept(contextWithArguments(WEB_URL));
@@ -494,6 +511,43 @@ class SwissToolBotTest {
     assertThat(editedMessages()).hasSize(2)
         .allSatisfy(message -> assertThat(message.getText()).isEqualTo("<b>Cached</b>"));
     verify(fetchCache, times(2)).getOrCompute(eq(WEB_URL), any());
+    verifyNoInteractions(urlFetchService);
+  }
+
+  @Test
+  @DisplayName("a message that is just a URL is routed to the /web fetcher")
+  void urlMessageIsFetched() {
+    stubFetchingPrompt();
+    stubWebPipeline();
+    when(urlFetchService.fetch(WEB_URL)).thenReturn(new FetchOutcome.Inline(List.of("<b>Title</b>")));
+
+    swissToolBot.handleDefaultReply().action().accept(contextWithText(WEB_URL));
+
+    assertThat(editedMessages()).singleElement()
+        .extracting(EditMessageText::getText).isEqualTo("<b>Title</b>");
+  }
+
+  @Test
+  @DisplayName("a bare host-like message is treated as an https URL and fetched")
+  void bareHostMessageIsFetched() {
+    stubFetchingPrompt();
+    stubWebPipeline();
+    when(urlFetchService.fetch("example.com")).thenReturn(new FetchOutcome.Inline(List.of("<b>Title</b>")));
+
+    swissToolBot.handleDefaultReply().action().accept(contextWithText("example.com"));
+
+    assertThat(editedMessages()).singleElement()
+        .extracting(EditMessageText::getText).isEqualTo("<b>Title</b>");
+  }
+
+  @Test
+  @DisplayName("a plain text message still goes to the AI")
+  void plainTextMessageGoesToAi() {
+    when(askService.ask("hello")).thenReturn("hi");
+
+    swissToolBot.handleDefaultReply().action().accept(contextWithText("hello"));
+
+    verify(askService).ask("hello");
     verifyNoInteractions(urlFetchService);
   }
 

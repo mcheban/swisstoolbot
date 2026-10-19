@@ -297,20 +297,23 @@ public class DocumentExtractor {
   }
 
   private static Block applyLanguage(Block block, Map<String, String> languages) {
-    if (block instanceof Block.Pre pre && pre.language() == null) {
-      String language = languages.get(collapse(pre.text()));
-      return language != null ? new Block.Pre(pre.text(), language) : pre;
-    }
-    if (block instanceof Block.ListBlock list) {
-      List<Block.ListItem> items = list.items().stream()
-          .map(item -> new Block.ListItem(applyLanguages(item.blocks(), languages)))
-          .toList();
-      return new Block.ListBlock(list.ordered(), items);
-    }
-    if (block instanceof Block.Quote quote) {
-      return new Block.Quote(applyLanguages(quote.blocks(), languages));
-    }
-    return block;
+    return switch (block) {
+      case Block.Pre(String text, String language) -> {
+        if (language != null) {
+          yield block;
+        }
+        String detected = languages.get(collapse(text));
+        yield detected != null ? new Block.Pre(text, detected) : block;
+      }
+      case Block.ListBlock(boolean ordered, List<Block.ListItem> items) -> {
+        List<Block.ListItem> mapped = items.stream()
+            .map(item -> new Block.ListItem(applyLanguages(item.blocks(), languages)))
+            .toList();
+        yield new Block.ListBlock(ordered, mapped);
+      }
+      case Block.Quote(List<Block> blocks) -> new Block.Quote(applyLanguages(blocks, languages));
+      case Block.Heading _, Block.Paragraph _, Block.Image _, Block.Table _ -> block;
+    };
   }
 
   private static void addTable(Element element, List<Block> blocks) {
@@ -452,10 +455,10 @@ public class DocumentExtractor {
   /** Merges adjacent text runs and re-collapses their whitespace into single spaces. */
   private static void collapseTextRuns(List<Inline> inlines) {
     for (int i = 0; i < inlines.size(); i++) {
-      if (inlines.get(i) instanceof Inline.Text text) {
-        String collapsed = WHITESPACE.matcher(text.text()).replaceAll(" ");
-        if (i > 0 && inlines.get(i - 1) instanceof Inline.Text previous) {
-          inlines.set(i - 1, new Inline.Text(previous.text() + collapsed));
+      if (inlines.get(i) instanceof Inline.Text(String text)) {
+        String collapsed = WHITESPACE.matcher(text).replaceAll(" ");
+        if (i > 0 && inlines.get(i - 1) instanceof Inline.Text(String previous)) {
+          inlines.set(i - 1, new Inline.Text(previous + collapsed));
           inlines.remove(i);
           i--;
         } else {
@@ -483,68 +486,52 @@ public class DocumentExtractor {
   }
 
   private static boolean startsWithWhitespace(List<Inline> inlines) {
-    return !inlines.isEmpty() && startsWithWhitespace(inlines.get(0));
+    return !inlines.isEmpty() && startsWithWhitespace(inlines.getFirst());
   }
 
   private static boolean startsWithWhitespace(Inline inline) {
-    if (inline instanceof Inline.Text text) {
-      return !text.text().isEmpty() && Character.isWhitespace(text.text().charAt(0));
-    }
-    if (inline instanceof Inline.Bold bold) {
-      return startsWithWhitespace(bold.inlines());
-    }
-    if (inline instanceof Inline.Italic italic) {
-      return startsWithWhitespace(italic.inlines());
-    }
-    if (inline instanceof Inline.Link link) {
-      return startsWithWhitespace(link.inlines());
-    }
-    return inline instanceof Inline.LineBreak;
+    return switch (inline) {
+      case Inline.Text(String text) -> !text.isEmpty() && Character.isWhitespace(text.charAt(0));
+      case Inline.Bold(List<Inline> inlines) -> startsWithWhitespace(inlines);
+      case Inline.Italic(List<Inline> inlines) -> startsWithWhitespace(inlines);
+      case Inline.Link(_, List<Inline> inlines) -> startsWithWhitespace(inlines);
+      case Inline.Code _ -> false;
+      case Inline.LineBreak _ -> true;
+    };
   }
 
   private static boolean endsWithWhitespace(List<Inline> inlines) {
-    return !inlines.isEmpty() && endsWithWhitespace(inlines.get(inlines.size() - 1));
+    return !inlines.isEmpty() && endsWithWhitespace(inlines.getLast());
   }
 
   private static boolean endsWithWhitespace(Inline inline) {
-    if (inline instanceof Inline.Text text) {
-      return !text.text().isEmpty()
-          && Character.isWhitespace(text.text().charAt(text.text().length() - 1));
-    }
-    if (inline instanceof Inline.Bold bold) {
-      return endsWithWhitespace(bold.inlines());
-    }
-    if (inline instanceof Inline.Italic italic) {
-      return endsWithWhitespace(italic.inlines());
-    }
-    if (inline instanceof Inline.Link link) {
-      return endsWithWhitespace(link.inlines());
-    }
-    return inline instanceof Inline.LineBreak;
+    return switch (inline) {
+      case Inline.Text(String text) ->
+          !text.isEmpty() && Character.isWhitespace(text.charAt(text.length() - 1));
+      case Inline.Bold(List<Inline> inlines) -> endsWithWhitespace(inlines);
+      case Inline.Italic(List<Inline> inlines) -> endsWithWhitespace(inlines);
+      case Inline.Link(_, List<Inline> inlines) -> endsWithWhitespace(inlines);
+      case Inline.Code _ -> false;
+      case Inline.LineBreak _ -> true;
+    };
   }
 
   private static Inline trimLeading(Inline inline) {
-    if (inline instanceof Inline.Text text) {
-      return new Inline.Text(text.text().replaceAll("^\\s+", ""));
-    }
-    if (inline instanceof Inline.Bold bold) {
-      return new Inline.Bold(trimLeading(bold.inlines()));
-    }
-    if (inline instanceof Inline.Italic italic) {
-      return new Inline.Italic(trimLeading(italic.inlines()));
-    }
-    if (inline instanceof Inline.Link link) {
-      return new Inline.Link(link.href(), trimLeading(link.inlines()));
-    }
-    return inline;
+    return switch (inline) {
+      case Inline.Text(String text) -> new Inline.Text(text.replaceAll("^\\s+", ""));
+      case Inline.Bold(List<Inline> inlines) -> new Inline.Bold(trimLeading(inlines));
+      case Inline.Italic(List<Inline> inlines) -> new Inline.Italic(trimLeading(inlines));
+      case Inline.Link(String href, List<Inline> inlines) -> new Inline.Link(href, trimLeading(inlines));
+      case Inline.Code _, Inline.LineBreak _ -> inline;
+    };
   }
 
   private static List<Inline> trimLeading(List<Inline> inlines) {
     List<Inline> result = new ArrayList<>(inlines);
     while (!result.isEmpty()) {
-      Inline first = trimLeading(result.get(0));
+      Inline first = trimLeading(result.getFirst());
       if (isEmptyInline(first)) {
-        result.remove(0);
+        result.removeFirst();
         continue;
       }
       result.set(0, first);
@@ -554,19 +541,13 @@ public class DocumentExtractor {
   }
 
   private static Inline trimTrailing(Inline inline) {
-    if (inline instanceof Inline.Text text) {
-      return new Inline.Text(text.text().replaceAll("\\s+$", ""));
-    }
-    if (inline instanceof Inline.Bold bold) {
-      return new Inline.Bold(trimTrailing(bold.inlines()));
-    }
-    if (inline instanceof Inline.Italic italic) {
-      return new Inline.Italic(trimTrailing(italic.inlines()));
-    }
-    if (inline instanceof Inline.Link link) {
-      return new Inline.Link(link.href(), trimTrailing(link.inlines()));
-    }
-    return inline;
+    return switch (inline) {
+      case Inline.Text(String text) -> new Inline.Text(text.replaceAll("\\s+$", ""));
+      case Inline.Bold(List<Inline> inlines) -> new Inline.Bold(trimTrailing(inlines));
+      case Inline.Italic(List<Inline> inlines) -> new Inline.Italic(trimTrailing(inlines));
+      case Inline.Link(String href, List<Inline> inlines) -> new Inline.Link(href, trimTrailing(inlines));
+      case Inline.Code _, Inline.LineBreak _ -> inline;
+    };
   }
 
   private static List<Inline> trimTrailing(List<Inline> inlines) {
@@ -585,42 +566,36 @@ public class DocumentExtractor {
   }
 
   private static boolean isEmptyInline(Inline inline) {
-    if (inline instanceof Inline.Text text) {
-      return text.text().isEmpty();
-    }
-    if (inline instanceof Inline.Bold bold) {
-      return bold.inlines().isEmpty();
-    }
-    if (inline instanceof Inline.Italic italic) {
-      return italic.inlines().isEmpty();
-    }
-    if (inline instanceof Inline.Link link) {
-      return link.inlines().isEmpty();
-    }
-    return false;
+    return switch (inline) {
+      case Inline.Text(String text) -> text.isEmpty();
+      case Inline.Bold(List<Inline> inlines) -> inlines.isEmpty();
+      case Inline.Italic(List<Inline> inlines) -> inlines.isEmpty();
+      case Inline.Link(_, List<Inline> inlines) -> inlines.isEmpty();
+      case Inline.Code _, Inline.LineBreak _ -> false;
+    };
   }
 
   private static Inline normalizeInline(Inline inline) {
-    if (inline instanceof Inline.Text text) {
-      String collapsed = WHITESPACE.matcher(text.text()).replaceAll(" ");
-      return collapsed.isEmpty() ? null : new Inline.Text(collapsed);
-    }
-    if (inline instanceof Inline.Bold bold) {
-      List<Inline> children = normalize(bold.inlines(), false);
-      return children.isEmpty() ? null : new Inline.Bold(List.copyOf(children));
-    }
-    if (inline instanceof Inline.Italic italic) {
-      List<Inline> children = normalize(italic.inlines(), false);
-      return children.isEmpty() ? null : new Inline.Italic(List.copyOf(children));
-    }
-    if (inline instanceof Inline.Link link) {
-      List<Inline> children = normalize(link.inlines(), false);
-      return children.isEmpty() ? null : new Inline.Link(link.href(), List.copyOf(children));
-    }
-    if (inline instanceof Inline.Code code) {
-      return code.text() == null || code.text().isEmpty() ? null : code;
-    }
-    return inline;   // LineBreak
+    return switch (inline) {
+      case Inline.Text(String text) -> {
+        String collapsed = WHITESPACE.matcher(text).replaceAll(" ");
+        yield collapsed.isEmpty() ? null : new Inline.Text(collapsed);
+      }
+      case Inline.Bold(List<Inline> inlines) -> {
+        List<Inline> children = normalize(inlines, false);
+        yield children.isEmpty() ? null : new Inline.Bold(List.copyOf(children));
+      }
+      case Inline.Italic(List<Inline> inlines) -> {
+        List<Inline> children = normalize(inlines, false);
+        yield children.isEmpty() ? null : new Inline.Italic(List.copyOf(children));
+      }
+      case Inline.Link(String href, List<Inline> inlines) -> {
+        List<Inline> children = normalize(inlines, false);
+        yield children.isEmpty() ? null : new Inline.Link(href, List.copyOf(children));
+      }
+      case Inline.Code(String text) -> text == null || text.isEmpty() ? null : inline;
+      case Inline.LineBreak _ -> inline;
+    };
   }
 
   /**
@@ -639,19 +614,17 @@ public class DocumentExtractor {
 
   /** Images and tables are content even when they carry no readable text. */
   private static boolean hasNonTextBlock(List<Block> blocks) {
-    for (Block block : blocks) {
-      if (block instanceof Block.Image || block instanceof Block.Table) {
-        return true;
-      }
-      if (block instanceof Block.ListBlock list
-          && list.items().stream().anyMatch(item -> hasNonTextBlock(item.blocks()))) {
-        return true;
-      }
-      if (block instanceof Block.Quote quote && hasNonTextBlock(quote.blocks())) {
-        return true;
-      }
-    }
-    return false;
+    return blocks.stream().anyMatch(DocumentExtractor::hasNonTextBlock);
+  }
+
+  private static boolean hasNonTextBlock(Block block) {
+    return switch (block) {
+      case Block.Image _, Block.Table _ -> true;
+      case Block.ListBlock(_, List<Block.ListItem> items) ->
+          items.stream().anyMatch(item -> hasNonTextBlock(item.blocks()));
+      case Block.Quote(List<Block> inner) -> hasNonTextBlock(inner);
+      case Block.Heading _, Block.Paragraph _, Block.Pre _ -> false;
+    };
   }
 
   private static String plainText(List<Block> blocks) {
@@ -659,28 +632,17 @@ public class DocumentExtractor {
   }
 
   private static String plainText(Block block) {
-    if (block instanceof Block.Heading heading) {
-      return plainTextInlines(heading.inlines());
-    }
-    if (block instanceof Block.Paragraph paragraph) {
-      return plainTextInlines(paragraph.inlines());
-    }
-    if (block instanceof Block.ListBlock list) {
-      return list.items().stream().map(item -> plainText(item.blocks())).collect(Collectors.joining("\n"));
-    }
-    if (block instanceof Block.Quote quote) {
-      return plainText(quote.blocks());
-    }
-    if (block instanceof Block.Pre pre) {
-      return pre.text();
-    }
-    if (block instanceof Block.Image image) {
-      return image.alt();
-    }
-    if (block instanceof Block.Table table) {
-      return table.rows().stream().map(row -> String.join(" ", row)).collect(Collectors.joining("\n"));
-    }
-    return "";
+    return switch (block) {
+      case Block.Heading(_, List<Inline> inlines) -> plainTextInlines(inlines);
+      case Block.Paragraph(List<Inline> inlines) -> plainTextInlines(inlines);
+      case Block.ListBlock(_, List<Block.ListItem> items) ->
+          items.stream().map(item -> plainText(item.blocks())).collect(Collectors.joining("\n"));
+      case Block.Quote(List<Block> inner) -> plainText(inner);
+      case Block.Pre(String text, _) -> text;
+      case Block.Image(_, String alt) -> alt;
+      case Block.Table(List<List<String>> rows) ->
+          rows.stream().map(row -> String.join(" ", row)).collect(Collectors.joining("\n"));
+    };
   }
 
   private static String plainTextInlines(List<Inline> inlines) {
@@ -688,25 +650,14 @@ public class DocumentExtractor {
   }
 
   private static String plainText(Inline inline) {
-    if (inline instanceof Inline.Text text) {
-      return text.text();
-    }
-    if (inline instanceof Inline.Code code) {
-      return code.text();
-    }
-    if (inline instanceof Inline.Bold bold) {
-      return plainTextInlines(bold.inlines());
-    }
-    if (inline instanceof Inline.Italic italic) {
-      return plainTextInlines(italic.inlines());
-    }
-    if (inline instanceof Inline.Link link) {
-      return plainTextInlines(link.inlines());
-    }
-    if (inline instanceof Inline.LineBreak) {
-      return "\n";
-    }
-    return "";
+    return switch (inline) {
+      case Inline.Text(String text) -> text;
+      case Inline.Code(String text) -> text;
+      case Inline.Bold(List<Inline> inlines) -> plainTextInlines(inlines);
+      case Inline.Italic(List<Inline> inlines) -> plainTextInlines(inlines);
+      case Inline.Link(_, List<Inline> inlines) -> plainTextInlines(inlines);
+      case Inline.LineBreak _ -> "\n";
+    };
   }
 
   private static String absoluteUrl(Element element, String attribute) {

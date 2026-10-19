@@ -8,12 +8,14 @@ spring:
 
 # Limits for the /web fetcher: it downloads pages the user hands it, so timeouts, body size and
 # redirect depth all have to be bounded. The cache keeps a URL's rendered result and the rate limit
-# caps how many fetches a chat (and the bot) may start per window.
+# caps how many fetches a chat (and the bot) may start per window. max-messages bounds how many
+# Telegram messages one page may occupy before the remainder is marked as truncated.
 fetch:
   connect-timeout-ms: 3000
   read-timeout-ms: 5000
   max-body-bytes: 5242880
   max-redirects: 5
+  max-messages: 5
   cache:
     ttl: 30m
     max-size: 200

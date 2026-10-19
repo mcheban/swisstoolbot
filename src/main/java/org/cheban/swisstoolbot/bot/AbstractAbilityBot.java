@@ -67,7 +67,7 @@ public abstract class AbstractAbilityBot extends AbilityBot {
 
   protected Reply promptReply(String prompt, BiConsumer<Long, String> action) {
     return Reply.of(
-            (bot, upd) -> action.accept(upd.getMessage().getChatId(), upd.getMessage().getText()),
+            (_, upd) -> action.accept(upd.getMessage().getChatId(), upd.getMessage().getText()),
             Flag.MESSAGE, Flag.TEXT, Flag.REPLY,
             upd -> prompt.equals(upd.getMessage().getReplyToMessage().getText()));
   }
@@ -88,6 +88,7 @@ public abstract class AbstractAbilityBot extends AbilityBot {
         .build());
   }
 
+  @SuppressWarnings("unused")
   protected void sendMarkdown(Long chatId, String msgMarkdown) {
     this.silent.execute(SendMessage.builder()
         .chatId(Long.toString(chatId))
@@ -130,6 +131,7 @@ public abstract class AbstractAbilityBot extends AbilityBot {
     }
   }
 
+  @SuppressWarnings("unused")
   protected InputMedia buildImageMedia(ImageResult image) {
     log.info("[buildImageMedia] {}", image.src());
     return InputMediaPhoto.builder()
@@ -149,6 +151,7 @@ public abstract class AbstractAbilityBot extends AbilityBot {
         .build();
   }
 
+  @SuppressWarnings("unused")
   protected SendPhoto.SendPhotoBuilder<?, ?> buildSendPhoto(ImageResult image) {
     log.info("[buildSendPhoto] {}", image.src());
     return SendPhoto.builder()

@@ -61,7 +61,7 @@ class DocumentExtractorTest {
           paragraph -> assertThat(paragraph.inlines()).contains(new Inline.Bold(List.of(new Inline.Text("bold")))));
       assertThat(list.items().get(1).blocks()).last().isInstanceOfSatisfying(Block.ListBlock.class, nested -> {
         assertThat(nested.ordered()).isFalse();
-        assertThat(textOf(nested.items().get(0).blocks())).isEqualTo("Nested item");
+        assertThat(textOf(nested.items().getFirst().blocks())).isEqualTo("Nested item");
       });
     });
 
@@ -116,7 +116,7 @@ class DocumentExtractorTest {
 
     WebDocument document = fallbackExtractor.extract(html, SOURCE_URL);
 
-    List<Inline> inlines = ((Block.Paragraph) document.blocks().get(0)).inlines();
+    List<Inline> inlines = ((Block.Paragraph) document.blocks().getFirst()).inlines();
     assertThat(inlines).filteredOn(Inline.Link.class::isInstance)
         .extracting(inline -> ((Inline.Link) inline).href())
         .containsExactly("mailto:ada@example.com");
@@ -146,7 +146,7 @@ class DocumentExtractorTest {
 
     WebDocument document = fallbackExtractor.extract(html, SOURCE_URL);
 
-    assertThat(inlineText(((Block.Paragraph) document.blocks().get(0)).inlines()))
+    assertThat(inlineText(((Block.Paragraph) document.blocks().getFirst()).inlines()))
         .isEqualTo("red green blue");
   }
 
@@ -325,28 +325,17 @@ class DocumentExtractorTest {
   }
 
   private static String textOf(Block block) {
-    if (block instanceof Block.Heading heading) {
-      return inlineText(heading.inlines());
-    }
-    if (block instanceof Block.Paragraph paragraph) {
-      return inlineText(paragraph.inlines());
-    }
-    if (block instanceof Block.ListBlock list) {
-      return list.items().stream().map(item -> textOf(item.blocks())).collect(Collectors.joining("\n"));
-    }
-    if (block instanceof Block.Quote quote) {
-      return textOf(quote.blocks());
-    }
-    if (block instanceof Block.Pre pre) {
-      return pre.text();
-    }
-    if (block instanceof Block.Image image) {
-      return image.alt();
-    }
-    if (block instanceof Block.Table table) {
-      return table.rows().stream().map(row -> String.join(" ", row)).collect(Collectors.joining("\n"));
-    }
-    return "";
+    return switch (block) {
+      case Block.Heading(_, List<Inline> inlines) -> inlineText(inlines);
+      case Block.Paragraph(List<Inline> inlines) -> inlineText(inlines);
+      case Block.ListBlock(_, List<Block.ListItem> items) ->
+          items.stream().map(item -> textOf(item.blocks())).collect(Collectors.joining("\n"));
+      case Block.Quote(List<Block> inner) -> textOf(inner);
+      case Block.Pre(String text, _) -> text;
+      case Block.Image(_, String alt) -> alt;
+      case Block.Table(List<List<String>> rows) ->
+          rows.stream().map(row -> String.join(" ", row)).collect(Collectors.joining("\n"));
+    };
   }
 
   private static String inlineText(List<Inline> inlines) {
@@ -354,25 +343,14 @@ class DocumentExtractorTest {
   }
 
   private static String textOf(Inline inline) {
-    if (inline instanceof Inline.Text text) {
-      return text.text();
-    }
-    if (inline instanceof Inline.Code code) {
-      return code.text();
-    }
-    if (inline instanceof Inline.Bold bold) {
-      return inlineText(bold.inlines());
-    }
-    if (inline instanceof Inline.Italic italic) {
-      return inlineText(italic.inlines());
-    }
-    if (inline instanceof Inline.Link link) {
-      return inlineText(link.inlines());
-    }
-    if (inline instanceof Inline.LineBreak) {
-      return "\n";
-    }
-    return "";
+    return switch (inline) {
+      case Inline.Text(String text) -> text;
+      case Inline.Code(String text) -> text;
+      case Inline.Bold(List<Inline> inlines) -> inlineText(inlines);
+      case Inline.Italic(List<Inline> inlines) -> inlineText(inlines);
+      case Inline.Link(_, List<Inline> inlines) -> inlineText(inlines);
+      case Inline.LineBreak _ -> "\n";
+    };
   }
 
   /** Skips Readability4J so the Jsoup heuristic can be tested deterministically. */

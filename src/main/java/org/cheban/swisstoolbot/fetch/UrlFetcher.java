@@ -3,6 +3,7 @@ package org.cheban.swisstoolbot.fetch;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.cheban.swisstoolbot.util.HttpUtil;
+import org.jspecify.annotations.NonNull;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -320,7 +321,7 @@ public class UrlFetcher {
     }
 
     @Override
-    public int read(byte[] buffer, int offset, int length) throws IOException {
+    public int read(byte @NonNull [] buffer, int offset, int length) throws IOException {
       if (finished) {
         return -1;
       }

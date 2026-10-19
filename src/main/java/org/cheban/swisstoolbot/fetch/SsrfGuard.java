@@ -26,6 +26,38 @@ public class SsrfGuard {
   private static final Pattern HIERARCHICAL_SCHEME = Pattern.compile("^[a-zA-Z][a-zA-Z0-9+.\\-]*://");
   private static final Pattern OPAQUE_SCHEME = Pattern.compile("^[a-zA-Z][a-zA-Z0-9+\\-]*:");
   private static final Pattern NUMERIC_HOST = Pattern.compile("[0-9]+(?:\\.[0-9]+)*");
+  /**
+   * A single link token: an explicit {@code http(s)://} URL, a bare domain (with an alphabetic TLD and
+   * optional port/path) or a bare IPv4 literal. Dotted numbers that are not hosts ({@code e.g} is a
+   * single-letter TLD, {@code 3.14} a non-alphabetic one) and words without a dot do not match.
+   */
+  private static final Pattern LINK = Pattern.compile(
+      "(?i)^(?:"
+          + "https?://\\S+"
+          + "|(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\\.)+[a-z]{2,}(?::\\d{1,5})?(?:[/?#]\\S*)?"
+          + "|(?:\\d{1,3}\\.){3}\\d{1,3}(?::\\d{1,5})?(?:[/?#]\\S*)?"
+          + ")$");
+
+  /**
+   * True when {@code text} is a single link token that {@link #validate(String)} accepts. Used to
+   * route free-form messages to the fetcher while reusing the same URL rules; a bare host is assumed
+   * to be HTTPS by {@code validate}. The gate keeps ordinary words from being treated as URLs.
+   */
+  public static boolean isUrl(String text) {
+    if (text == null) {
+      return false;
+    }
+    String candidate = text.trim();
+    if (!LINK.matcher(candidate).matches()) {
+      return false;
+    }
+    try {
+      validate(candidate);
+      return true;
+    } catch (FetchException e) {
+      return false;
+    }
+  }
 
   /**
    * Parses and normalizes a user-supplied URL into an absolute, IDN-normalized {@code http}/{@code https}

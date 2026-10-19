@@ -128,39 +128,6 @@ public class HttpUtil {
     return getContent(url, headers, HttpUtil::readerToString);
   }
 
-  /**
-   * POSTs {@code jsonBody} to {@code url} and returns the response body, or {@code null} when the
-   * request failed or answered with a non-200 status.
-   */
-  public static String postJson(String url, String jsonBody) {
-    try {
-      log.debug("Making POST request: URL={}", url);
-      HttpRequest req = HttpRequest.newBuilder(URI.create(url))
-          .timeout(REQUEST_TIMEOUT)
-          .header("Content-Type", "application/json")
-          .header("Accept", ACCEPT_JSON)
-          .POST(HttpRequest.BodyPublishers.ofString(jsonBody, StandardCharsets.UTF_8))
-          .build();
-      HttpResponse<InputStream> resp = HTTP.send(req, HttpResponse.BodyHandlers.ofInputStream());
-      if (resp.statusCode() != 200) {
-        log.error("POST {} got non-200 response: {}", url, resp.statusCode());
-        resp.body().close();
-        return null;
-      }
-      try (InputStream body = resp.body();
-           Reader in = new InputStreamReader(body, StandardCharsets.UTF_8)) {
-        return readerToString(in);
-      }
-    } catch (InterruptedException e) {
-      Thread.currentThread().interrupt();
-      log.error("POST interrupted: {}", url);
-      return null;
-    } catch (Exception e) {
-      log.error("Exception during POST", e);
-      return null;
-    }
-  }
-
   public static <T> T loadJson(String url, Function<Reader, T> responseTransformer) {
     return getContent(url, LOAD_JSON_HEADERS, responseTransformer);
   }

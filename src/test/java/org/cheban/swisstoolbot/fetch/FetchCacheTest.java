@@ -19,7 +19,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 @DisplayName("FetchCache")
 class FetchCacheTest {
   private static final String URL = "https://example.com/article";
-  private static final FetchOutcome INLINE = new FetchOutcome.Inline("<b>Title</b>");
+  private static final FetchOutcome INLINE = new FetchOutcome.Inline(List.of("<b>Title</b>"));
   private static final FetchOutcome FAILURE = new FetchOutcome.Failure(FetchError.FETCH_FAILED);
 
   private final FetchCache cache = new FetchCache(Duration.ofMinutes(30), 100);

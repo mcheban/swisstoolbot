@@ -11,6 +11,5 @@ public enum FetchError {
   NOT_HTML,
   TOO_LARGE,
   EMPTY_CONTENT,
-  RATE_LIMITED,
-  TELEGRAPH_FAILED
+  RATE_LIMITED
 }

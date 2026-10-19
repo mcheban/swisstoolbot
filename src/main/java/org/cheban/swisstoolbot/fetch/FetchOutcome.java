@@ -1,18 +1,18 @@
 package org.cheban.swisstoolbot.fetch;
 
+import java.util.List;
+
 /**
  * What {@link UrlFetchService} hands back to the bot for a {@code /web} request. Exactly one of the
- * three shapes is produced, so the bot never has to guess whether a reply body is HTML, a link or an
- * error.
+ * two shapes is produced, so the bot never has to guess whether a reply body is HTML or an error.
  */
 public sealed interface FetchOutcome {
 
-  /** The page fits into a single message; {@code html} is ready for {@code parse_mode=HTML}. */
-  record Inline(String html) implements FetchOutcome {
-  }
-
-  /** The page was too rich for a chat message; {@code url} is the generated telegra.ph page. */
-  record Telegraph(String url) implements FetchOutcome {
+  /**
+   * The page rendered for a Telegram message. {@code messages} holds one entry for a short page and
+   * several entries (page 1, page 2, ...) when the content had to be split.
+   */
+  record Inline(List<String> messages) implements FetchOutcome {
   }
 
   /** The request failed; {@code error} selects the user-facing message. */

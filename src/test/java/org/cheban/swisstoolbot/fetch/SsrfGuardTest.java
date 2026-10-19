@@ -213,6 +213,46 @@ class SsrfGuardTest {
     assertThat(errorOfUrl("http://169.254.169.254/latest/meta-data/")).isEqualTo(FetchError.BLOCKED_URL);
   }
 
+  @Test
+  @DisplayName("isUrl accepts explicit http(s), www and bare host-like links")
+  void isUrlAcceptsLinks() {
+    assertThat(SsrfGuard.isUrl("http://example.com")).isTrue();
+    assertThat(SsrfGuard.isUrl("https://example.com/path?q=1#fragment")).isTrue();
+    assertThat(SsrfGuard.isUrl("HTTP://EXAMPLE.COM")).isTrue();
+    assertThat(SsrfGuard.isUrl("  https://example.com/a  ")).isTrue();
+    assertThat(SsrfGuard.isUrl("www.example.com")).isTrue();
+    assertThat(SsrfGuard.isUrl("www.example.com/path")).isTrue();
+    assertThat(SsrfGuard.isUrl("example.com")).isTrue();
+    assertThat(SsrfGuard.isUrl("sub.example.co.uk/article")).isTrue();
+    assertThat(SsrfGuard.isUrl("example.com:8080/path?q=1")).isTrue();
+    assertThat(SsrfGuard.isUrl("8.8.8.8")).isTrue();
+    assertThat(SsrfGuard.isUrl("8.8.8.8:8080/dns")).isTrue();
+  }
+
+  @Test
+  @DisplayName("a bare host-like token is assumed to be HTTPS")
+  void isUrlAssumesHttpsForBareHosts() {
+    assertThat(SsrfGuard.validate("example.com").getScheme()).isEqualTo("https");
+    assertThat(SsrfGuard.validate("example.com").toString()).isEqualTo("https://example.com/");
+  }
+
+  @Test
+  @DisplayName("isUrl rejects free text, bare words and dotted non-hosts")
+  void isUrlRejectsNonLinks() {
+    assertThat(SsrfGuard.isUrl(null)).isFalse();
+    assertThat(SsrfGuard.isUrl("")).isFalse();
+    assertThat(SsrfGuard.isUrl("   ")).isFalse();
+    assertThat(SsrfGuard.isUrl("hello")).isFalse();
+    assertThat(SsrfGuard.isUrl("hello world")).isFalse();
+    assertThat(SsrfGuard.isUrl("e.g")).isFalse();
+    assertThat(SsrfGuard.isUrl("3.14")).isFalse();
+    assertThat(SsrfGuard.isUrl("tell me about https://example.com")).isFalse();
+    assertThat(SsrfGuard.isUrl("file:///etc/passwd")).isFalse();
+    assertThat(SsrfGuard.isUrl("javascript:alert(1)")).isFalse();
+    assertThat(SsrfGuard.isUrl("http://")).isFalse();
+    assertThat(SsrfGuard.isUrl("http://exa mple.com")).isFalse();
+  }
+
   private static FetchError errorOf(String url) {
     try {
       SsrfGuard.validate(url);

@@ -7,6 +7,7 @@ import org.cheban.swisstoolbot.fetch.FetchCache;
 import org.cheban.swisstoolbot.fetch.FetchError;
 import org.cheban.swisstoolbot.fetch.FetchOutcome;
 import org.cheban.swisstoolbot.fetch.FetchRateLimiter;
+import org.cheban.swisstoolbot.fetch.SsrfGuard;
 import org.cheban.swisstoolbot.fetch.UrlFetchService;
 import org.cheban.swisstoolbot.objects.FuelPrice;
 import org.cheban.swisstoolbot.objects.LocationInfo;
@@ -333,29 +334,43 @@ public class SwissToolBot extends AbstractAbilityBot {
 
   private void performWebFetch(long chatId, String url) {
     Integer messageId = this.sendTextAndGetId(chatId, FETCHING);
-    String reply = webReply(chatId, url.strip());
-    if (messageId == null) {
-      this.sendHtml(chatId, reply);
-    } else {
-      this.editHtml(chatId, messageId, reply);
+    FetchOutcome outcome = webOutcome(chatId, url.strip());
+    switch (outcome) {
+      case FetchOutcome.Inline inline -> sendFetchResult(chatId, messageId, inline.messages());
+      case FetchOutcome.Failure failure -> {
+        String reply = webErrorMessage(failure.error());
+        if (messageId == null) {
+          this.sendHtml(chatId, reply);
+        } else {
+          this.editHtml(chatId, messageId, reply);
+        }
+      }
     }
   }
 
+  /** Replaces the "Fetching…" message with the first page and sends the remaining pages after it. */
+  private void sendFetchResult(long chatId, Integer messageId, List<String> messages) {
+    if (messages.isEmpty()) {
+      return;
+    }
+    if (messageId == null) {
+      messages.forEach(message -> this.sendHtml(chatId, message));
+      return;
+    }
+    this.editHtml(chatId, messageId, messages.getFirst());
+    messages.stream().skip(1).forEach(message -> this.sendHtml(chatId, message));
+  }
+
   /**
-   * Rate-limits first, then serves the URL through the cache so a repeated link is neither refetched
-   * nor published twice. Failure messages carry no markup, so one HTML reply covers every outcome.
+   * Rate-limits first, then serves the URL through the cache so a repeated link is not refetched.
+   * Failure messages carry no markup, but the HTML reply path covers every outcome.
    */
-  private String webReply(long chatId, String url) {
+  private FetchOutcome webOutcome(long chatId, String url) {
     if (!fetchRateLimiter.tryAcquire(chatId)) {
       log.info("[web] Rate-limited chat {}", chatId);
-      return webErrorMessage(FetchError.RATE_LIMITED);
+      return new FetchOutcome.Failure(FetchError.RATE_LIMITED);
     }
-    FetchOutcome outcome = fetchCache.getOrCompute(url, urlFetchService::fetch);
-    return switch (outcome) {
-      case FetchOutcome.Inline inline -> inline.html();
-      case FetchOutcome.Telegraph telegraph -> telegraph.url();
-      case FetchOutcome.Failure failure -> webErrorMessage(failure.error());
-    };
+    return fetchCache.getOrCompute(url, urlFetchService::fetch);
   }
 
   private static String webErrorMessage(FetchError error) {
@@ -367,7 +382,6 @@ public class SwissToolBot extends AbstractAbilityBot {
       case TOO_LARGE -> "That page is too large to fetch.";
       case EMPTY_CONTENT -> "No readable content found: the page may need JavaScript or a subscription.";
       case RATE_LIMITED -> "Too many requests, please try again in a moment.";
-      case TELEGRAPH_FAILED -> "Could not prepare that page for reading.";
     };
   }
 
@@ -383,7 +397,13 @@ public class SwissToolBot extends AbstractAbilityBot {
     if (!msg.hasText() || msg.isCommand() || msg.isReply()) return;
     if (!msg.isUserMessage()) return; // private chats only
 
-    this.performAsk(ctx.chatId(), msg.getText());
+    String text = msg.getText();
+    if (SsrfGuard.isUrl(text)) {
+      this.performWebFetch(ctx.chatId(), text);
+      return;
+    }
+
+    this.performAsk(ctx.chatId(), text);
   }
 
   private void doUpdateLocation(MessageContext ctx) {

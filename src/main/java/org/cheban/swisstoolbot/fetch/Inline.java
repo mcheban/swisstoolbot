@@ -3,9 +3,9 @@ package org.cheban.swisstoolbot.fetch;
 import java.util.List;
 
 /**
- * Inline content of a {@link Block}. Only the constructs the Telegram and Telegraph renderers can
- * express are modelled; other markup (underline, strike-through, layout spans, ...) is flattened to
- * plain {@link Text}.
+ * Inline content of a {@link Block}. Only the constructs the Telegram renderer can express are
+ * modelled; other markup (underline, strike-through, layout spans, ...) is flattened to plain
+ * {@link Text}.
  */
 public sealed interface Inline {
 

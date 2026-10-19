@@ -11,12 +11,12 @@ import java.util.Objects;
 import java.util.function.Function;
 
 /**
- * Remembers the outcome of a {@code /web} request by URL, so asking for the same link twice neither
- * refetches the page nor creates a second telegra.ph page.
+ * Remembers the outcome of a {@code /web} request by URL, so asking for the same link twice does not
+ * refetch the page.
  *
  * <p>Only successes are kept: a failure is usually transient (a blip, a paywall, a page that grows
  * later), and caching it would keep the link unreadable for the whole TTL. {@link Cache#get} makes
- * the loader single-flight, so concurrent requests for the same URL still create at most one page.
+ * the loader single-flight, so concurrent requests for the same URL still fetch at most once.
  */
 @Slf4j
 @Component
