@@ -378,13 +378,17 @@ public class TelegramRenderer {
   private List<List<Inline>> splitInlines(List<Inline> inlines, int budget) {
     List<List<Inline>> chunks = new ArrayList<>();
     List<Inline> current = new ArrayList<>();
+    int currentLength = 0;
     for (Inline inline : inlines) {
       for (Inline piece : splitInline(inline, budget)) {
-        if (!current.isEmpty() && renderInlines(appended(current, piece)).length() > budget) {
+        int pieceLength = renderInline(piece).length();
+        if (!current.isEmpty() && currentLength + pieceLength > budget) {
           chunks.add(List.copyOf(current));
           current = new ArrayList<>();
+          currentLength = 0;
         }
         current.add(piece);
+        currentLength += pieceLength;
       }
     }
     if (!current.isEmpty()) {
@@ -438,13 +442,6 @@ public class TelegramRenderer {
       pieces.add(factory.apply(chunk));
     }
     return pieces;
-  }
-
-  private static List<Inline> appended(List<Inline> current, Inline piece) {
-    List<Inline> candidate = new ArrayList<>(current.size() + 1);
-    candidate.addAll(current);
-    candidate.add(piece);
-    return candidate;
   }
 
   /** Splits text so the escaped form of every piece fits {@code budget}. */

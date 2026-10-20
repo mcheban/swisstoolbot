@@ -24,7 +24,7 @@ public class UrlFetchService {
       WebDocument document = documentExtractor.extract(page.body(), page.finalUrl());
       return new FetchOutcome.Inline(telegramRenderer.render(document));
     } catch (FetchException e) {
-      log.info("[web] {} failed: {}", url, e.error());
+      log.info("[web] {} failed: {} ({})", url, e.error(), e.getMessage());
       return new FetchOutcome.Failure(e.error());
     } catch (RuntimeException e) {
       log.warn("[web] Unexpected failure for {}", url, e);

@@ -46,6 +46,7 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Function;
@@ -59,6 +60,7 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.atLeastOnce;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -107,6 +109,8 @@ class SwissToolBotTest {
   private FetchRateLimiter fetchRateLimiter;
   @Mock
   private FetchCache fetchCache;
+  @Mock
+  private Executor fetchExecutor;
   @Spy
   private BotProperties botProperties = testProperties();
   @InjectMocks
@@ -129,6 +133,11 @@ class SwissToolBotTest {
     chatId = NEXT_CHAT_ID.incrementAndGet();
     contextDb = new ContextDb(swissToolBot.getDb(), chatId);
     ReflectionTestUtils.setField(swissToolBot, "contextDb", contextDb);
+    // Run the offloaded fetch inline so the /web assertions stay deterministic.
+    lenient().doAnswer(invocation -> {
+      invocation.getArgument(0, Runnable.class).run();
+      return null;
+    }).when(fetchExecutor).execute(any());
   }
 
   @AfterEach
@@ -506,6 +515,20 @@ class SwissToolBotTest {
   }
 
   @Test
+  @DisplayName("/web replaces the placeholder when the page renders to nothing")
+  void webEmptyResultReplacesPlaceholder() {
+    stubFetchingPrompt();
+    stubWebPipeline();
+    when(urlFetchService.fetch(WEB_URL)).thenReturn(new FetchOutcome.Inline(List.of()));
+
+    swissToolBot.web().action().accept(contextWithArguments(WEB_URL));
+
+    assertThat(editedMessages()).singleElement()
+        .extracting(EditMessageText::getText)
+        .isEqualTo("No readable content found: the page may need JavaScript or a subscription.");
+  }
+
+  @Test
   @DisplayName("/web replies with the rate-limited message and never fetches when over the limit")
   void webRateLimitedDoesNotFetch() {
     stubFetchingPrompt();
@@ -517,6 +540,19 @@ class SwissToolBotTest {
         .extracting(EditMessageText::getText)
         .isEqualTo("Too many requests, please try again in a moment.");
     verifyNoInteractions(urlFetchService, fetchCache);
+  }
+
+  @Test
+  @DisplayName("/web rejects a malformed URL without spending a rate-limit slot")
+  void invalidUrlDoesNotConsumeRateLimit() {
+    stubFetchingPrompt();
+
+    swissToolBot.web().action().accept(contextWithArguments("ftp://example.com"));
+
+    assertThat(editedMessages()).singleElement()
+        .extracting(EditMessageText::getText)
+        .isEqualTo("That URL is blocked for security reasons.");
+    verifyNoInteractions(fetchRateLimiter, fetchCache, urlFetchService);
   }
 
   @Test
@@ -533,6 +569,19 @@ class SwissToolBotTest {
         .allSatisfy(message -> assertThat(message.getText()).isEqualTo("<b>Cached</b>"));
     verify(fetchCache, times(2)).getOrCompute(eq(WEB_URL), any());
     verifyNoInteractions(urlFetchService);
+  }
+
+  @Test
+  @DisplayName("/web keys the cache on the canonical URL, so case and fragment do not split entries")
+  void webCacheKeyIsCanonical() {
+    stubFetchingPrompt();
+    when(fetchRateLimiter.tryAcquire(anyLong())).thenReturn(true);
+    when(fetchCache.getOrCompute(eq(WEB_URL), any()))
+        .thenReturn(new FetchOutcome.Inline(List.of("<b>Cached</b>")));
+
+    swissToolBot.web().action().accept(contextWithArguments("HTTPS://EXAMPLE.COM/article#section"));
+
+    verify(fetchCache).getOrCompute(eq(WEB_URL), any());
   }
 
   @Test
@@ -553,7 +602,8 @@ class SwissToolBotTest {
   void bareHostMessageIsFetched() {
     stubFetchingPrompt();
     stubWebPipeline();
-    when(urlFetchService.fetch("example.com")).thenReturn(new FetchOutcome.Inline(List.of("<b>Title</b>")));
+    when(urlFetchService.fetch("https://example.com/"))
+        .thenReturn(new FetchOutcome.Inline(List.of("<b>Title</b>")));
 
     swissToolBot.handleDefaultReply().action().accept(contextWithText("example.com"));
 

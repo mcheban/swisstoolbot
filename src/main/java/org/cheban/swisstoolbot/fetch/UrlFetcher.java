@@ -44,6 +44,8 @@ import java.util.zip.GZIPInputStream;
 public class UrlFetcher {
   private static final Set<Integer> REDIRECT_STATUSES = Set.of(301, 302, 303, 307, 308);
   private static final int MAX_HEADER_LINES = 200;
+  /** Caps a single status/header/chunk-size/trailer line so a hostile server cannot exhaust memory. */
+  private static final int MAX_LINE_BYTES = 8192;
   private static final Charset HEADER_CHARSET = StandardCharsets.ISO_8859_1;
 
   @Value("${fetch.connect-timeout-ms:3000}")
@@ -204,6 +206,9 @@ public class UrlFetcher {
         int length = line.length > 0 && line[line.length - 1] == '\r' ? line.length - 1 : line.length;
         return new String(line, 0, length, HEADER_CHARSET);
       }
+      if (buffer.size() >= MAX_LINE_BYTES) {
+        throw new FetchException(FetchError.FETCH_FAILED, "Response line exceeds " + MAX_LINE_BYTES + " bytes");
+      }
       buffer.write(b);
     }
     return buffer.size() == 0 ? null : buffer.toString(HEADER_CHARSET);
@@ -234,7 +239,7 @@ public class UrlFetcher {
 
   private static boolean isHtml(Map<String, String> headers) {
     String contentType = headers.get("content-type");
-    return contentType != null && firstToken(contentType).toLowerCase(Locale.ROOT).startsWith("text/html");
+    return contentType != null && firstToken(contentType).toLowerCase(Locale.ROOT).equals("text/html");
   }
 
   private static String decode(Response response) {

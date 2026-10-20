@@ -42,12 +42,22 @@ class UrlFetcherTest {
     server = HttpServer.create(new InetSocketAddress(InetAddress.getByName("127.0.0.1"), 0), 0);
     server.createContext("/html", exchange -> respond(exchange, "text/html; charset=utf-8", bytes(HTML)));
     server.createContext("/plain", exchange -> respond(exchange, "text/plain", bytes("not html")));
+    server.createContext("/html-lookalike", exchange -> respond(exchange, "text/htmlfoo", bytes(HTML)));
     server.createContext("/missing", exchange -> respondNoBody(exchange, 404));
     server.createContext("/big", exchange -> respond(exchange, "text/html", new byte[4096]));
     server.createContext("/big-chunked", exchange -> respondChunked(exchange, new byte[4096]));
     server.createContext("/padded", exchange -> {
       int size = Integer.parseInt(exchange.getRequestURI().getQuery().substring("n=".length()));
       respond(exchange, "text/html", paddedHtml(size));
+    });
+    server.createContext("/long-header", exchange -> {
+      exchange.getResponseHeaders().add("Content-Type", "text/html; charset=utf-8");
+      exchange.getResponseHeaders().add("X-Big", "x".repeat(9000));
+      byte[] body = bytes(HTML);
+      exchange.sendResponseHeaders(200, body.length);
+      try (OutputStream out = exchange.getResponseBody()) {
+        out.write(body);
+      }
     });
     server.createContext("/chunked", exchange -> respondChunked(exchange, bytes("<html><body>chunked body</body></html>")));
     server.createContext("/gzip", UrlFetcherTest::respondGzip);
@@ -108,6 +118,12 @@ class UrlFetcherTest {
   }
 
   @Test
+  @DisplayName("a content type that merely starts with text/html is rejected")
+  void rejectsHtmlLookalikeContentType() {
+    assertThat(errorOf(origin + "/html-lookalike")).isEqualTo(FetchError.NOT_HTML);
+  }
+
+  @Test
   @DisplayName("a non-200 status is reported as a fetch failure")
   void rejectsNonSuccessStatus() {
     assertThat(errorOf(origin + "/missing")).isEqualTo(FetchError.FETCH_FAILED);
@@ -134,6 +150,12 @@ class UrlFetcherTest {
     UrlFetcher capped = new LocalUrlFetcher(CONNECT_TIMEOUT_MS, READ_TIMEOUT_MS, 1024L, 5);
 
     assertThat(capped.fetch(origin + "/padded?n=1024").body()).hasSize(1024);
+  }
+
+  @Test
+  @DisplayName("an oversized response header line is rejected instead of buffered")
+  void rejectsOversizedHeaderLine() {
+    assertThat(errorOf(origin + "/long-header")).isEqualTo(FetchError.FETCH_FAILED);
   }
 
   @Test

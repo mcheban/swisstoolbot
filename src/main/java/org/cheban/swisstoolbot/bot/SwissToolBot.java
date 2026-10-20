@@ -5,6 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.cheban.swisstoolbot.configuration.BotProperties;
 import org.cheban.swisstoolbot.fetch.FetchCache;
 import org.cheban.swisstoolbot.fetch.FetchError;
+import org.cheban.swisstoolbot.fetch.FetchException;
 import org.cheban.swisstoolbot.fetch.FetchOutcome;
 import org.cheban.swisstoolbot.fetch.FetchRateLimiter;
 import org.cheban.swisstoolbot.fetch.SsrfGuard;
@@ -19,6 +20,7 @@ import org.cheban.swisstoolbot.objects.WebResult;
 import org.cheban.swisstoolbot.util.LocationUtil;
 import org.cheban.swisstoolbot.util.MarkdownUtil;
 import org.cheban.swisstoolbot.util.ReplyMethod;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 import org.telegram.telegrambots.abilitybots.api.objects.*;
 import org.telegram.telegrambots.abilitybots.api.util.AbilityUtils;
@@ -45,6 +47,7 @@ import org.telegram.telegrambots.meta.generics.TelegramClient;
 
 import java.util.Arrays;
 import java.util.List;
+import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
@@ -72,6 +75,7 @@ public class SwissToolBot extends AbstractAbilityBot {
   private final UrlFetchService urlFetchService;
   private final FetchRateLimiter fetchRateLimiter;
   private final FetchCache fetchCache;
+  private final Executor fetchExecutor;
   private final BotProperties botProperties;
   private ContextDb contextDb;
 
@@ -85,7 +89,8 @@ public class SwissToolBot extends AbstractAbilityBot {
                       FuelPriceService fuelPriceService,
                       UrlFetchService urlFetchService,
                       FetchRateLimiter fetchRateLimiter,
-                      FetchCache fetchCache) {
+                      FetchCache fetchCache,
+                      @Qualifier("fetchExecutor") Executor fetchExecutor) {
     super(telegramClient, botProperties.getUsername(), botProperties.getCreatorId());
     this.botProperties = botProperties;
     this.geocodeService = geocodeService;
@@ -97,6 +102,7 @@ public class SwissToolBot extends AbstractAbilityBot {
     this.urlFetchService = urlFetchService;
     this.fetchRateLimiter = fetchRateLimiter;
     this.fetchCache = fetchCache;
+    this.fetchExecutor = fetchExecutor;
   }
 
   @PostConstruct
@@ -308,6 +314,7 @@ public class SwissToolBot extends AbstractAbilityBot {
   }
 
   /** Fetches the search result whose "🌐 Fetch" button was pressed. */
+  @ReplyMethod
   public Reply fetchWebCallback() {
     return Reply.of((_, update) -> handleFetchCallback(update),
         Flag.CALLBACK_QUERY,
@@ -376,25 +383,32 @@ public class SwissToolBot extends AbstractAbilityBot {
     return this.promptReply(PROMPT_URL, this::performWebFetch);
   }
 
+  /**
+   * Announces the fetch on the update thread, then hands the blocking work to {@code fetchExecutor}
+   * so a slow page cannot stall the bot's single update-consumer thread. The fetch never touches
+   * {@link #contextDb}, so running it off that thread is safe.
+   */
   private void performWebFetch(long chatId, String url) {
     Integer messageId = this.sendTextAndGetId(chatId, FETCHING);
-    FetchOutcome outcome = webOutcome(chatId, url.strip());
-    switch (outcome) {
-      case FetchOutcome.Inline inline -> sendFetchResult(chatId, messageId, inline.messages());
-      case FetchOutcome.Failure failure -> {
-        String reply = webErrorMessage(failure.error());
-        if (messageId == null) {
-          this.sendHtml(chatId, reply);
-        } else {
-          this.editHtml(chatId, messageId, reply);
-        }
+    fetchExecutor.execute(() -> completeWebFetch(chatId, url.strip(), messageId));
+  }
+
+  private void completeWebFetch(long chatId, String url, Integer messageId) {
+    try {
+      FetchOutcome outcome = webOutcome(chatId, url);
+      switch (outcome) {
+        case FetchOutcome.Inline inline -> sendFetchResult(chatId, messageId, inline.messages());
+        case FetchOutcome.Failure failure -> replyHtml(chatId, messageId, webErrorMessage(failure.error()));
       }
+    } catch (RuntimeException e) {
+      log.error("[web] Could not deliver the fetch result for {}", url, e);
     }
   }
 
   /** Replaces the "Fetching…" message with the first page and sends the remaining pages after it. */
   private void sendFetchResult(long chatId, Integer messageId, List<String> messages) {
     if (messages.isEmpty()) {
+      replyHtml(chatId, messageId, webErrorMessage(FetchError.EMPTY_CONTENT));
       return;
     }
     if (messageId == null) {
@@ -405,16 +419,34 @@ public class SwissToolBot extends AbstractAbilityBot {
     messages.stream().skip(1).forEach(message -> this.sendHtml(chatId, message));
   }
 
+  /** Replaces the "Fetching…" message with {@code reply}, or sends it fresh when there is none to edit. */
+  private void replyHtml(long chatId, Integer messageId, String reply) {
+    if (messageId == null) {
+      this.sendHtml(chatId, reply);
+    } else {
+      this.editHtml(chatId, messageId, reply);
+    }
+  }
+
   /**
-   * Rate-limits first, then serves the URL through the cache so a repeated link is not refetched.
-   * Failure messages carry no markup, but the HTML reply path covers every outcome.
+   * Validates first, then rate-limits and serves the URL through the cache so a repeated link is not
+   * refetched. Validating before reserving a slot means a malformed or blocked link never spends the
+   * rate-limit budget. The cache is keyed by the canonical form of the URL ({@link SsrfGuard#validate}),
+   * so case, default ports and fragments do not create separate entries. Failure messages carry no
+   * markup, but the HTML reply path covers every outcome.
    */
   private FetchOutcome webOutcome(long chatId, String url) {
+    String key;
+    try {
+      key = SsrfGuard.validate(url).toString();
+    } catch (FetchException e) {
+      return new FetchOutcome.Failure(e.error());
+    }
     if (!fetchRateLimiter.tryAcquire(chatId)) {
       log.info("[web] Rate-limited chat {}", chatId);
       return new FetchOutcome.Failure(FetchError.RATE_LIMITED);
     }
-    return fetchCache.getOrCompute(url, urlFetchService::fetch);
+    return fetchCache.getOrCompute(key, urlFetchService::fetch);
   }
 
   private static String webErrorMessage(FetchError error) {
