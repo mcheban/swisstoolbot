@@ -32,13 +32,16 @@ dependencies {
   compileOnly 'org.projectlombok:lombok:1.18.38'
   annotationProcessor 'org.projectlombok:lombok:1.18.38'
 
+  implementation 'org.springframework.boot:spring-boot-starter'
+  implementation 'org.springframework.boot:spring-boot-starter-cache'
+  implementation 'org.springframework.boot:spring-boot-starter-web'
+  implementation 'org.springframework.boot:spring-boot-starter-actuator'
+
   implementation 'org.jsoup:jsoup:1.23.2'
   // Readability4J ports Mozilla's Readability and is used to pick an article's main content.
   // It declares a transitive org.jsoup:jsoup:1.11.2, but the explicit jsoup dependency above wins
   // Gradle's conflict resolution (highest version), so the resolved graph stays on jsoup:1.23.2.
   implementation 'net.dankito.readability4j:readability4j:1.0.8'
-  implementation 'org.springframework.boot:spring-boot-starter'
-  implementation 'org.springframework.boot:spring-boot-starter-cache'
   implementation 'com.github.ben-manes.caffeine:caffeine'
   implementation 'org.telegram:telegrambots-longpolling:10.3.0'
   implementation('org.telegram:telegrambots-abilities:10.3.0') {
