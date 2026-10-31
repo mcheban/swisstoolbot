@@ -28,6 +28,10 @@ configurations { mockitoAgent }
 // and CVE-2026-89407, CVE-2026-89425 (jackson-core). 2.21.7 is the fixed release of this line.
 ext['jackson-2-bom.version'] = '2.21.7'
 
+configurations.configureEach {
+  exclude group: 'org.springframework.boot', module: 'spring-boot-starter-tomcat'
+}
+
 dependencies {
   compileOnly 'org.projectlombok:lombok:1.18.38'
   annotationProcessor 'org.projectlombok:lombok:1.18.38'
@@ -35,6 +39,7 @@ dependencies {
   implementation 'org.springframework.boot:spring-boot-starter'
   implementation 'org.springframework.boot:spring-boot-starter-cache'
   implementation 'org.springframework.boot:spring-boot-starter-web'
+  implementation 'org.springframework.boot:spring-boot-starter-jetty'
   implementation 'org.springframework.boot:spring-boot-starter-actuator'
 
   implementation 'org.jsoup:jsoup:1.23.2'
