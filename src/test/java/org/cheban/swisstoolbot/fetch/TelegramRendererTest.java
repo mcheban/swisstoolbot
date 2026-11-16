@@ -16,7 +16,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class TelegramRendererTest {
   private static final String TITLE = "Page Title";
   private static final String SOURCE_URL = "https://example.com/page";
-  private static final String HEADER = "<a href=\"" + SOURCE_URL + "\">" + SOURCE_URL + "</a>";
+  private static final String HEADER = SOURCE_URL;
 
   private final TelegramRenderer renderer = new TelegramRenderer(5);
 

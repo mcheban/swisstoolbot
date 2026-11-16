@@ -22,7 +22,7 @@ import java.util.function.Function;
 @Component
 public class TelegramRenderer {
   /** Effective per-message budget, kept under Telegram's 4096-character limit for entity headroom. */
-  static final int MAX_MESSAGE_LENGTH = 3500;
+  static final int MAX_MESSAGE_LENGTH = 3900;
   static final String TRUNCATION_MARKER = "\n\n<i>[Content truncated]</i>";
   private static final String INDENT = "  ";
   private static final String BULLET = "• ";
@@ -82,7 +82,7 @@ public class TelegramRenderer {
     if (url == null || url.isBlank()) {
       return "";
     }
-    return link(url, escape(url));
+    return escape(url);
   }
 
   private List<String> bodyPieces(WebDocument document, int budget) {
